@@ -97,7 +97,7 @@ else
   [ -d "$GNS3_HOME" ] || $SUDO mkdir -p "$GNS3_HOME"
 fi
 
-# Group memberships: ubridge, kvm, libvirt
+# Group memberships: ubridge, kvm, libvirt (always needed for GNS3)
 log "Adding $GNS3_USER to groups: ubridge, kvm, libvirt"
 $SUDO usermod -aG ubridge "$GNS3_USER" || true
 $SUDO usermod -aG kvm "$GNS3_USER" || true
@@ -111,6 +111,7 @@ if [ "$INSTALL_DOCKER" -eq 1 ]; then
   else
     log "Docker already installed: $(docker --version 2>/dev/null || echo present)"
   fi
+  log "Adding $GNS3_USER to docker group"
   $SUDO usermod -aG docker "$GNS3_USER" || true
 fi
 
@@ -125,18 +126,22 @@ if [ "$INSTALL_VIRTUALBOX" -eq 1 ]; then
     $SUDO apt-get install -y "linux-headers-${KVER}" || true
   fi
   # Add user to vboxusers group
+  log "Adding $GNS3_USER to vboxusers group"
   $SUDO usermod -aG vboxusers "$GNS3_USER" || true
 fi
 
 # Optional: VMware Workstation/Player integration
-# Note: This installs the GNS3 integration packages. VMware itself must be installed separately by the admin.
+# Note: This installs the GNS3 integration packages. VMware itself must be
+# installed separately by the admin.
 if [ "$INSTALL_VMWARE" -eq 1 ]; then
   log "Installing VMware integration packages for GNS3"
-  # gns3 has vmware integration helpers in the PPA; also install open-vm-tools for convenience
+  # gns3 has vmware integration helpers in the PPA; also install
+  # open-vm-tools for convenience
   $SUDO apt-get install -y open-vm-tools open-vm-tools-desktop || true
-  # The GNS3 VMware integration is typically inside gns3-gui for desktop, but server uses remote VMs via vmrun.
-  # Install vmrun if VMware Workstation/Player is installed; we do not fetch proprietary VMware here.
-  # You can later place vmrun in PATH and GNS3 will detect it.
+  # The GNS3 VMware integration is typically inside gns3-gui for desktop,
+  # but server uses remote VMs via vmrun. Install vmrun if VMware
+  # Workstation/Player is installed; we do not fetch proprietary VMware
+  # here. You can later place vmrun in PATH and GNS3 will detect it.
 fi
 
 # Optional IOU support
@@ -155,8 +160,10 @@ fi
 GNS3_LOG_DIR="/var/log/gns3"
 GNS3_RUN_DIR="/var/run/gns3"
 $SUDO mkdir -p "$GNS3_LOG_DIR" "$GNS3_RUN_DIR" \
-  "${GNS3_HOME}/images" "${GNS3_HOME}/projects" "${GNS3_HOME}/appliances" "${GNS3_HOME}/configs"
-$SUDO chown -R "$GNS3_USER:$GNS3_USER" "$GNS3_LOG_DIR" "$GNS3_RUN_DIR" "$GNS3_HOME"
+  "${GNS3_HOME}/images" "${GNS3_HOME}/projects" \
+  "${GNS3_HOME}/appliances" "${GNS3_HOME}/configs"
+$SUDO chown -R "$GNS3_USER:$GNS3_USER" "$GNS3_LOG_DIR" "$GNS3_RUN_DIR" \
+  "$GNS3_HOME"
 
 # Write GNS3 server config
 log "Writing /etc/gns3/gns3_server.conf"
@@ -178,8 +185,12 @@ EOF
 
 if [ "$DISABLE_KVM" -eq 1 ]; then
   log "Disabling KVM in GNS3 config as requested"
-  $SUDO sed -i 's/enable_hardware_acceleration = True/enable_hardware_acceleration = False/' /etc/gns3/gns3_server.conf
-  $SUDO sed -i 's/require_hardware_acceleration = True/require_hardware_acceleration = False/' /etc/gns3/gns3_server.conf
+  $SUDO sed -i \
+    's/enable_hardware_acceleration = True/enable_hardware_acceleration = False/' \
+    /etc/gns3/gns3_server.conf
+  $SUDO sed -i \
+    's/require_hardware_acceleration = True/require_hardware_acceleration = False/' \
+    /etc/gns3/gns3_server.conf
 fi
 
 $SUDO chown -R "$GNS3_USER:$GNS3_USER" /etc/gns3

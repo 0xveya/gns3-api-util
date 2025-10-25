@@ -3,8 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stefanistkuhl/gns3util/cmd/auth"
 	"github.com/stefanistkuhl/gns3util/cmd/class"
 	"github.com/stefanistkuhl/gns3util/cmd/exercise"
@@ -20,7 +22,7 @@ var (
 	version  bool
 )
 
-var Version = "1.2.7"
+var Version = "1.2.8"
 
 var Foo bool
 
@@ -31,6 +33,22 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
+		viper.SetEnvPrefix("GNS3")
+		viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+		viper.AutomaticEnv()
+
+		_ = viper.BindPFlag("server", cmd.Flags().Lookup("server"))
+		_ = viper.BindPFlag("insecure", cmd.Flags().Lookup("insecure"))
+		_ = viper.BindPFlag("raw", cmd.Flags().Lookup("raw"))
+		_ = viper.BindPFlag("no-color", cmd.Flags().Lookup("no-color"))
+		_ = viper.BindPFlag("key-file", cmd.Flags().Lookup("key-file"))
+
+		insecure := insecure || viper.GetBool("insecure")
+		raw := raw || viper.GetBool("raw")
+		noColor := noColor || viper.GetBool("no-color")
+		keyFile = viper.GetString("key-file")
+
 		if cmd.Name() == "completion" || (cmd.Parent() != nil && cmd.Parent().Name() == "completion") {
 			return nil
 		}
@@ -67,6 +85,7 @@ var rootCmd = &cobra.Command{
 			Insecure: insecure,
 			KeyFile:  keyFile,
 			Raw:      raw,
+			NoColors: noColor,
 		}
 		ctx := config.WithGlobalOptions(cmd.Context(), opts)
 		cmd.SetContext(ctx)
@@ -84,7 +103,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	cobra.OnFinalize()
-	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "GNS3v3 Server URL (required for non cluster commands)")
+	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "GNS3v3 Server URL (required for non cluster commands) ENV: GNS3_SERVER")
 	rootCmd.PersistentFlags().StringVarP(&keyFile, "key-file", "k", "", "Set a location for a keyfile to use")
 	rootCmd.PersistentFlags().BoolVarP(&insecure, "insecure", "i", false, "Ignore unsigned SSL-Certificates")
 	rootCmd.PersistentFlags().BoolVarP(&raw, "raw", "", false, "Output all data in raw json")
@@ -136,6 +155,9 @@ func validateGlobalFlags() error {
 }
 
 func validateRequiresServer() error {
+	if server == "" {
+		server = viper.GetString("server")
+	}
 	if server == "" {
 		return fmt.Errorf("required flag(s) \"server\" not set")
 	}
