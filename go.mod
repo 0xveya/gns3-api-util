@@ -1,6 +1,6 @@
 module github.com/stefanistkuhl/gns3util
 
-go 1.24.5
+go 1.25.3
 
 require (
 	github.com/charmbracelet/bubbles v0.21.0
