@@ -55,7 +55,6 @@ This command will:
 		RunE: runCreateExercise,
 	}
 
-	// Flags
 	createExerciseCmd.Flags().String("class", "", "Class name to create exercise for")
 	createExerciseCmd.Flags().String("exercise", "", "Exercise name")
 	createExerciseCmd.Flags().String("format", "{{class}}-{{exercise}}-{{group}}-{{uuid}}", "Project name format (supports {{class}}, {{exercise}}, {{group}}, {{uuid}})")
@@ -255,7 +254,8 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get clusters: %w", err)
 		}
-		var clusterID int
+
+		clusterID := 0
 		for _, c := range clusters {
 			if strings.EqualFold(strings.TrimSpace(c.Name), strings.TrimSpace(clusterName)) {
 				clusterID = c.Id
@@ -264,6 +264,25 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		}
 		if clusterID == 0 {
 			return fmt.Errorf("cluster not found: %s", clusterName)
+		}
+
+		classesInDb, getClassesErr := db.GetClassesFromDB(conn, clusterID)
+		if getClassesErr != nil {
+			return fmt.Errorf("failed to get classes from db: %w", getClassesErr)
+		}
+
+		if len(classesInDb) == 0 {
+			return fmt.Errorf("no classes found in database for cluster %d", clusterID)
+		}
+
+		classFound := false
+		for _, class := range classesInDb {
+			if class.Name == className {
+				classFound = true
+			}
+		}
+		if !classFound {
+			return fmt.Errorf("class %s not found in database for cluster %d", className, clusterID)
 		}
 
 		plans, err := db.GetNodeGroupNamesForClass(conn, clusterID, className)
@@ -562,8 +581,8 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 
 func extractGroupNumber(groupName, className string) string {
 	prefix := className + "-"
-	if strings.HasPrefix(groupName, prefix) {
-		return strings.TrimPrefix(groupName, prefix)
+	if after, ok := strings.CutPrefix(groupName, prefix); ok {
+		return after
 	}
 	return groupName
 }
