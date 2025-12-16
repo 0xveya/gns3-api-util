@@ -1,3 +1,3 @@
 [submodule "orchestration"]
 	path = orchestration
-	url = veya:gns3util-api
+	url = ssh://git@codeberg.org/veya/gns3util-api.git
