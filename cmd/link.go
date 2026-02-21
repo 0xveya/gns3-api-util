@@ -16,24 +16,19 @@ func NewLinkCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 links.`,
 	}
 
-	// Create subcommands
 	linkCmd.AddCommand(create.NewCreateLinkCmd())
 
-	// Get subcommands
 	linkCmd.AddCommand(get.NewGetLinksCmd())
 	linkCmd.AddCommand(get.NewGetLinkCmd())
 	linkCmd.AddCommand(get.NewGetLinkIfaceCmd())
 	linkCmd.AddCommand(get.NewGetLinkFiltersCmd())
 
-	// Post subcommands
 	linkCmd.AddCommand(post.NewResetLinkCmd())
 	linkCmd.AddCommand(post.NewStartCaptureCmd())
 	linkCmd.AddCommand(post.NewStopCaptureCmd())
 
-	// Update subcommands
 	linkCmd.AddCommand(update.NewUpdateLinkCmd())
 
-	// Delete subcommands
 	linkCmd.AddCommand(delete.NewDeleteLinkCmd())
 
 	return linkCmd

@@ -18,7 +18,6 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/api/endpoints"
 	"github.com/stefanistkuhl/gns3util/pkg/authentication"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
-	"github.com/stefanistkuhl/gns3util/pkg/utils/errorUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/pathUtils"
 	"github.com/tidwall/gjson"
@@ -125,6 +124,7 @@ func CallClient(cfg config.GlobalOptions, cmdName string, args []string, body an
 		}
 		return respBody, status, err
 	}
+	defer resp.Body.Close()
 	return respBody, resp.StatusCode, nil
 }
 
@@ -283,7 +283,7 @@ func PrintKVWithResourceContext(body []byte, resourceType, contextLabel string) 
 }
 
 func PrintSeperator() {
-	fmt.Println(messageUtils.Seperator(strings.Repeat("-", 69)))
+	fmt.Println(messageUtils.Separator(strings.Repeat("-", 69)))
 }
 
 func ExecuteAndPrintWithBody(cfg config.GlobalOptions, cmdName string, args []string, body any) {
@@ -315,6 +315,7 @@ func IsValidUUIDv4(s string) bool {
 	u, err := uuid.Parse(s)
 	return err == nil && u.Version() == 4
 }
+
 func ResolveID(cfg config.GlobalOptions, subcommand string, name string, args []string) (string, error) {
 	titleCaser := cases.Title(language.Und)
 	key, ok := subcommandKeyMap[subcommand]
@@ -542,7 +543,7 @@ func ValidateAndTestUrl(input string) bool {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, input, nil)
+	req, err := http.NewRequest(http.MethodGet, input, http.NoBody)
 	if err != nil {
 		return false
 	}
@@ -661,16 +662,16 @@ func GetUserInKeyFileForUrl(cfg config.GlobalOptions) (string, error) {
 	if cfg.KeyFile != "" {
 		keys, getKeyErr = pathUtils.LoadGNS3KeysFile(cfg.KeyFile)
 		if getKeyErr != nil {
-			return "", errorUtils.WrapError(getKeyErr, "failed to load keys")
+			return "", fmt.Errorf("%s: %w", "failed to load keys", getKeyErr)
 		}
 	} else {
 		path, getPathErr := pathUtils.GetGNS3Dir()
 		if getPathErr != nil {
-			return "", errorUtils.WrapError(getPathErr, "failed to get the gns3 dir")
+			return "", fmt.Errorf("%s: %w", "failed to get the gns3 dir", getPathErr)
 		}
 		keys, getKeyErr = pathUtils.LoadGNS3KeysFile(filepath.Join(path, "gns3key"))
 		if getKeyErr != nil {
-			return "", errorUtils.WrapError(getKeyErr, "failed to load keys")
+			return "", fmt.Errorf("%s: %w", "failed to load keys", getKeyErr)
 		}
 	}
 	for _, key := range keys {

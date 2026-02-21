@@ -12,7 +12,6 @@ func NewApplianceCmdGroup() *cobra.Command {
 		Long:  `Get and manage GNS3 appliances.`,
 	}
 
-	// Get subcommands
 	applianceCmd.AddCommand(get.NewGetAppliancesCmd())
 	applianceCmd.AddCommand(get.NewGetApplianceCmd())
 

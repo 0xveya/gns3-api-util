@@ -15,17 +15,13 @@ func NewDrawingCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 drawings.`,
 	}
 
-	// Create subcommands
 	drawingCmd.AddCommand(create.NewCreateDrawingCmd())
 
-	// Get subcommands
 	drawingCmd.AddCommand(get.NewGetDrawingsCmd())
 	drawingCmd.AddCommand(get.NewGetDrawingCmd())
 
-	// Update subcommands
 	drawingCmd.AddCommand(update.NewUpdateDrawingCmd())
 
-	// Delete subcommands
 	drawingCmd.AddCommand(delete.NewDeleteDrawingCmd())
 
 	return drawingCmd

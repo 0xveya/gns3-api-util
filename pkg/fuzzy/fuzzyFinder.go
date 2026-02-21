@@ -198,9 +198,7 @@ func (f *fuzzyFinder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-
 	}
-
 	var cmd tea.Cmd
 	f.input, cmd = f.input.Update(msg)
 
@@ -225,7 +223,7 @@ func (f *fuzzyFinder) View() string {
 }
 
 func getMatches(matches []fuzzy.Match) []string {
-	var results = []string{}
+	results := []string{}
 	for _, match := range matches {
 		results = append(results, match.Str)
 	}
@@ -265,7 +263,6 @@ func NewFuzzyFinder(input []string, multiMode bool) []string {
 func NewFuzzyFinderWithTitle(input []string, multiMode bool, title string) []string {
 	var result []string
 	model, err := newFuzzyFinder(input, multiMode, title)
-
 	if err != nil {
 		fmt.Println("Could not initialize Bubble Tea model:", err)
 		os.Exit(1)

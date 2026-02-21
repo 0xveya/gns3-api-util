@@ -63,7 +63,7 @@ func NewStateManager() (*StateManager, error) {
 	}
 
 	stateDir := filepath.Join(homeDir, ".gns3")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
@@ -78,7 +78,7 @@ func (sm *StateManager) SaveState(serverHost string, state ServerState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+	if err := os.WriteFile(stateFile, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -332,9 +332,9 @@ func ParseInteractiveOptions(optionsText string) (InstallSSLArgs, error) {
 		case "FIREWALL_ALLOW":
 			args.FirewallAllow = value
 		case "FIREWALL_BLOCK":
-			args.FirewallBlock = strings.ToLower(value) == "true"
+			args.FirewallBlock = strings.EqualFold(value, "true")
 		case "VERBOSE":
-			args.Verbose = strings.ToLower(value) == "true"
+			args.Verbose = strings.EqualFold(value, "true")
 		}
 	}
 

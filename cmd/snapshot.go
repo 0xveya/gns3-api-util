@@ -14,13 +14,10 @@ func NewSnapshotCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 snapshots.`,
 	}
 
-	// Create subcommands
 	snapshotCmd.AddCommand(create.NewCreateSnapshotCmd())
 
-	// Get subcommands
 	snapshotCmd.AddCommand(get.NewGetSnapshotsCmd())
 
-	// Delete subcommands
 	snapshotCmd.AddCommand(delete.NewDeleteSnapshotCmd())
 
 	return snapshotCmd

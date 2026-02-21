@@ -15,20 +15,16 @@ func NewComputeCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 computes.`,
 	}
 
-	// Create subcommands
 	computeCmd.AddCommand(create.NewCreateComputeCmd())
 
-	// Get subcommands
 	computeCmd.AddCommand(get.NewGetComputesCmd())
 	computeCmd.AddCommand(get.NewGetComputeCmd())
 	computeCmd.AddCommand(get.NewGetComputeDockerImagesCmd())
 	computeCmd.AddCommand(get.NewGetComputeVirtualboxVMSCmd())
 	computeCmd.AddCommand(get.NewGetComputeVmWareVMSCmd())
 
-	// Update subcommands
 	computeCmd.AddCommand(update.NewUpdateComputeCmd())
 
-	// Delete subcommands
 	computeCmd.AddCommand(delete.NewDeleteComputeCmd())
 
 	return computeCmd

@@ -12,7 +12,7 @@ import (
 func NewGetUserCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [user-name/id]",
 		Short:   "Get a user by id or name",
 		Long:    `Get a user by id or name`,
@@ -36,31 +36,29 @@ func NewGetUserCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v\n", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getUsers", "username", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "user", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getUser", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Enable fuzzy search mode for interactive selection")
@@ -69,17 +67,18 @@ func NewGetUserCmd() *cobra.Command {
 }
 
 func NewGetUsersCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get all users",
 		Long:    `Get all users`,
 		Example: "gns3util -s https://controller:3080 user ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getUsers", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -88,7 +87,7 @@ func NewGetUsersCmd() *cobra.Command {
 func NewGetGroupMembershipsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "group-membership [user-name/id]",
 		Short:   "Get the group memberships of a user by id or name",
 		Long:    `Get the group memberships of a user by id or name`,
@@ -112,24 +111,21 @@ func NewGetGroupMembershipsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getUsers", "username", multi, "user", "User:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				userMemberships, err := utils.GetResourceWithContext(cfg, "getGroupMemberships", ids, "user", "User:")
 				if err != nil {
-					fmt.Printf("Error getting group memberships: %v\n", err)
-					return
+					return fmt.Errorf("error getting group memberships: %w", err)
 				}
 
 				utils.PrintResourceWithContext(userMemberships, "User:")
@@ -138,12 +134,12 @@ func NewGetGroupMembershipsCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "user", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getGroupMemberships", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Enable fuzzy search mode for interactive selection")

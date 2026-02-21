@@ -3,6 +3,7 @@ package create
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ import (
 )
 
 func NewCreateExerciseCmd() *cobra.Command {
-	var createExerciseCmd = &cobra.Command{
+	createExerciseCmd := &cobra.Command{
 		Use:   "exercise",
 		Short: "Create an exercise (project) for every group in a class with ACLs",
 		Long: `Create an exercise (project) for every group in a class with ACLs to lock down access.
@@ -115,13 +116,7 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		groupName := group.Name
 		groupID := group.UserGroupID.String()
 
-		hasExercise := false
-		for _, existingGroup := range existingExercises {
-			if existingGroup == groupName {
-				hasExercise = true
-				break
-			}
-		}
+		hasExercise := slices.Contains(existingExercises, groupName)
 		if hasExercise {
 			continue
 		}
@@ -332,5 +327,5 @@ func confirmAction(message string) bool {
 	fmt.Printf("%s (y/N): ", message)
 	var response string
 	_, _ = fmt.Scanln(&response)
-	return strings.ToLower(response) == "y" || strings.ToLower(response) == "yes"
+	return strings.EqualFold(response, "y") || strings.EqualFold(response, "yes")
 }

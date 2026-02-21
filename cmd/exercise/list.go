@@ -9,6 +9,7 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
+	clusterutils "github.com/stefanistkuhl/gns3util/pkg/utils/clusterUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
@@ -33,28 +34,30 @@ func runExerciseLs(cmd *cobra.Command, args []string) error {
 	clusterName, _ := cmd.Flags().GetString("cluster")
 	className, _ := cmd.Flags().GetString("class")
 
-	clusterID, err := resolveExerciseClusterID(cfg, clusterName)
+	clusterID, err := clusterutils.ResolveClusterID(cfg, clusterName, cmd.Context())
 	if err != nil {
 		return err
 	}
 
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
 
-	nodes, err := db.GetNodeExercisesForClass(conn, clusterID, className)
+	sqlcRows, err := store.GetNodeExercisesForCluster(cmd.Context(), int64(clusterID))
 	if err != nil {
 		return fmt.Errorf("failed to get exercise distribution: %w", err)
 	}
 
+	nodes := clusterutils.TransformNodeExercises(sqlcRows, className)
+
+	if len(nodes) == 0 {
+		fmt.Println(messageUtils.InfoMsg("No exercises found in DB for this cluster"))
+		return nil
+	}
+
 	type row struct{ Node, Exercises, Projects, Groups string }
-	rows := make([]row, 0, len(nodes))
+	tableRows := make([]row, 0, len(nodes))
 	for _, n := range nodes {
 		exNames := make(map[string]bool)
 		projects := make(map[string]bool)
@@ -64,7 +67,7 @@ func runExerciseLs(cmd *cobra.Command, args []string) error {
 			projects[it.ProjectUUID] = true
 			groups[it.GroupName] = true
 		}
-		rows = append(rows, row{
+		tableRows = append(tableRows, row{
 			Node:      n.NodeURL,
 			Exercises: fmt.Sprintf("%d", len(exNames)),
 			Projects:  fmt.Sprintf("%d", len(projects)),
@@ -72,7 +75,7 @@ func runExerciseLs(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	utils.PrintTable(rows, []utils.Column[row]{
+	utils.PrintTable(tableRows, []utils.Column[row]{
 		{Header: "Node", Value: func(r row) string { return r.Node }},
 		{Header: "Exercises", Value: func(r row) string { return r.Exercises }},
 		{Header: "Projects", Value: func(r row) string { return r.Projects }},
@@ -111,48 +114,4 @@ func runExerciseLs(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func resolveExerciseClusterID(cfg config.GlobalOptions, clusterName string) (int, error) {
-	conn, err := db.InitIfNeeded()
-	if err != nil {
-		return 0, fmt.Errorf("failed to init db: %w", err)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	if clusterName != "" {
-		clusters, err := db.GetClusters(conn)
-		if err != nil {
-			return 0, fmt.Errorf("failed to get clusters: %w", err)
-		}
-		for _, c := range clusters {
-			if strings.EqualFold(strings.TrimSpace(c.Name), strings.TrimSpace(clusterName)) {
-				return c.Id, nil
-			}
-		}
-		return 0, fmt.Errorf("cluster not found: %s", clusterName)
-	}
-
-	if cfg.Server == "" {
-		return 0, fmt.Errorf("no server configured; use -s or provide -c cluster name")
-	}
-	u := utils.ValidateUrlWithReturn(cfg.Server)
-	if u == nil {
-		return 0, fmt.Errorf("invalid server url: %s", cfg.Server)
-	}
-	derived := fmt.Sprintf("%s%s", u.Hostname(), "_single_node_cluster")
-	clusters, err := db.GetClusters(conn)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get clusters: %w", err)
-	}
-	for _, c := range clusters {
-		if c.Name == derived {
-			return c.Id, nil
-		}
-	}
-	return 0, fmt.Errorf("cluster not found: %s", derived)
 }

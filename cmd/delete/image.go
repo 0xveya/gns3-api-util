@@ -15,15 +15,15 @@ func NewDeleteImageCmd() *cobra.Command {
 		Long:    `Delete an image from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 image delete /path/to/image",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			imageID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteImage", []string{imageID})
+			return nil
 		},
 	}
 

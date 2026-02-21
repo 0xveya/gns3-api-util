@@ -113,6 +113,7 @@ func WithTimeout(d time.Duration) SettingOption {
 		}
 	}
 }
+
 func (r *requestOptions) WithURL(path string) *requestOptions {
 	r.URL = path
 	return r

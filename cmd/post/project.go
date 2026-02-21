@@ -173,18 +173,16 @@ func NewProjectLoadCmd() *cobra.Command {
 		Long:    `Load a project from a given path on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post project load /path/to/project.gns3project`,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectPath := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -200,20 +198,21 @@ func NewProjectLoadCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to load project: %v", err)
-				return
+				return fmt.Errorf("failed to load project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 201 {
 				fmt.Printf("%s Project loaded successfully\n", messageUtils.SuccessMsg("Project loaded successfully"))
 			} else {
-				fmt.Printf("Failed to load project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to load project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -227,27 +226,24 @@ func NewProjectCloseCmd() *cobra.Command {
 		Long:    `Close a project on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project close my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -263,20 +259,21 @@ func NewProjectCloseCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to close project: %v", err)
-				return
+				return fmt.Errorf("failed to close project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Project closed successfully\n", messageUtils.SuccessMsg("Project closed successfully"))
 			} else {
-				fmt.Printf("Failed to close project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to close project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -380,27 +377,24 @@ func NewProjectLockCmd() *cobra.Command {
 		Long:    `Lock all drawings and nodes in a given project on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project lock my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -416,20 +410,21 @@ func NewProjectLockCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to lock project: %v", err)
-				return
+				return fmt.Errorf("failed to lock project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Project locked successfully\n", messageUtils.SuccessMsg("Project locked successfully"))
 			} else {
-				fmt.Printf("Failed to lock project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to lock project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -443,27 +438,24 @@ func NewProjectOpenCmd() *cobra.Command {
 		Long:    `Open a project on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project open my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -479,20 +471,21 @@ func NewProjectOpenCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to open project: %v", err)
-				return
+				return fmt.Errorf("failed to open project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Project opened successfully\n", messageUtils.SuccessMsg("Project opened successfully"))
 			} else {
-				fmt.Printf("Failed to open project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to open project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -506,27 +499,24 @@ func NewProjectUnlockCmd() *cobra.Command {
 		Long:    `Unlock all drawings and nodes in a given project on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project unlock my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -542,20 +532,21 @@ func NewProjectUnlockCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to unlock project: %v", err)
-				return
+				return fmt.Errorf("failed to unlock project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Project unlocked successfully\n", messageUtils.SuccessMsg("Project unlocked successfully"))
 			} else {
-				fmt.Printf("Failed to unlock project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to unlock project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -569,28 +560,25 @@ func NewProjectWriteFileCmd() *cobra.Command {
 		Long:    `Write a file to a project with the given file path on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project write-file my-project /path/to/file",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			filePath := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -606,20 +594,21 @@ func NewProjectWriteFileCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to write file to project: %v", err)
-				return
+				return fmt.Errorf("failed to write file to project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 201 {
 				fmt.Printf("%s File written to project successfully\n", messageUtils.SuccessMsg("File written to project successfully"))
 			} else {
-				fmt.Printf("Failed to write file to project with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to write file to project with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -633,33 +622,29 @@ func NewProjectStartCaptureCmd() *cobra.Command {
 		Long:    `Start a packet capture in a project on a given link on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project start-capture my-project my-link",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			linkID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(linkID) {
-				fmt.Println("Link ID must be a valid UUID")
-				return
+				return fmt.Errorf("link ID must be a valid UUID")
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -675,20 +660,21 @@ func NewProjectStartCaptureCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to start capture: %v", err)
-				return
+				return fmt.Errorf("failed to start capture: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode == 201 {
 				fmt.Printf("%s Packet capture started successfully\n", messageUtils.SuccessMsg("Packet capture started successfully"))
 			} else {
-				fmt.Printf("Failed to start packet capture with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to start packet capture with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 

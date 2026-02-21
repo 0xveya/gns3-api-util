@@ -1,359 +1,268 @@
 package cluster
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
 )
 
 func ApplyConfig(cfg Config) error {
-	conn, openErr := db.InitIfNeeded()
-	if openErr != nil {
-		return fmt.Errorf("DB open error: %v", openErr)
+	store, err := db.Init()
+	if err != nil {
+		return fmt.Errorf("db init: %w", err)
 	}
+	defer store.DB.Close()
 
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
+	ctx := context.Background()
 
-	var create db.CreateClustersAndNodes
 	for _, cluster := range cfg.Clusters {
-		var createCluster db.ClusterAndNodes
-		c := db.ClusterName{
-			Name: cluster.Name,
-			Desc: sql.NullString{
-				String: cluster.Description,
-				Valid:  cluster.Description != "",
-			},
-		}
-		createCluster.Cluster = c
 		for _, node := range cluster.Nodes {
-			n := db.NodeDataAll{
-				User:      node.User,
-				Protocol:  node.Protocol,
-				Host:      node.Host,
-				Port:      node.Port,
-				Weight:    node.Weight,
-				MaxGroups: node.MaxGroups,
+			url := fmt.Sprintf("%s://%s:%d", node.Protocol, node.Host, node.Port)
+			if !utils.ValidateAndTestUrl(url) {
+				return fmt.Errorf("cannot connect to: %s", url)
 			}
-			if utils.ValidateAndTestUrl(fmt.Sprintf("%s://%s:%d", node.Protocol, node.Host, node.Port)) {
-				createCluster.Nodes = append(createCluster.Nodes, n)
-			} else {
-				return fmt.Errorf("cant connect to: %s", fmt.Sprintf("%s://%s:%d", node.Protocol, node.Host, node.Port))
-			}
-
 		}
-		create.Clusters = append(create.Clusters, createCluster)
 	}
-	createNeeded, err := BuildCreateDelta(create, conn)
+
+	tx, err := store.DB.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to get the diff of the existing elements in the db and config: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	createErr := CreateClusterAndNodes(createNeeded, conn)
-	if createErr != nil {
-		return createErr
+	defer tx.Rollback()
+
+	qtx := store.WithTx(tx)
+
+	dbClusters, err := qtx.GetClusters(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("get clusters: %w", err)
 	}
 
-	if err := UpdateClustersAndNodes(cfg, conn); err != nil {
-		return fmt.Errorf("update existing: %w", err)
+	dbNodes, err := qtx.GetNodes(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("get nodes: %w", err)
 	}
 
-	return nil
-}
-
-func UpdateClustersAndNodes(cfg Config, conn *sql.DB) error {
-	dbClusters, err := db.GetClusters(conn)
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("load clusters: %w", err)
-	}
-	dbNodes, err := db.GetNodes(conn)
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("load nodes: %w", err)
-	}
-
-	cByName := make(map[string]db.ClusterName, len(dbClusters))
+	clusterByName := make(map[string]sqlc.Cluster)
 	for _, c := range dbClusters {
-		cByName[normName(c.Name)] = c
+		clusterByName[norm(c.Name)] = c
 	}
 
-	// Map (cluster_id, host:port) -> db node
-	type key struct {
-		ClusterID int
-		HostPort  string
-	}
-	nByKey := make(map[key]db.NodeDataAll, len(dbNodes))
+	nodesByCluster := make(map[int64][]sqlc.Node)
 	for _, n := range dbNodes {
-		nByKey[key{ClusterID: n.ClusterID, HostPort: nodeKey(n.Host, n.Port)}] = n
+		nodesByCluster[n.ClusterID] = append(nodesByCluster[n.ClusterID], n)
 	}
 
-	for _, cl := range cfg.Clusters {
-		nname := normName(cl.Name)
-		dbc, ok := cByName[nname]
-		if !ok {
-			continue
-		}
-		curDesc := ""
-		if dbc.Desc.Valid {
-			curDesc = strings.TrimSpace(dbc.Desc.String)
-		}
-		newDesc := strings.TrimSpace(cl.Description)
-		if curDesc != newDesc {
-			_, err := db.UpdateRows(conn,
-				"UPDATE clusters SET description = ? WHERE cluster_id = ?",
-				func() sql.NullString {
-					if newDesc == "" {
-						return sql.NullString{Valid: false}
-					}
-					return sql.NullString{String: newDesc, Valid: true}
-				}(),
-				dbc.Id,
-			)
-			if err != nil {
-				return fmt.Errorf("update cluster desc %s: %w", cl.Name, err)
-			}
-		}
+	configClusterNames := make(map[string]bool)
 
-		for _, nn := range cl.Nodes {
-			hostPort := nodeKey(nn.Host, nn.Port)
-			dbn, ok := nByKey[key{ClusterID: dbc.Id, HostPort: hostPort}]
-			if !ok {
-				continue
-			}
+	for _, cfgCluster := range cfg.Clusters {
+		nname := norm(cfgCluster.Name)
+		configClusterNames[nname] = true
 
-			proto := strings.ToLower(strings.TrimSpace(nn.Protocol))
-			if proto == "" {
-				proto = strings.ToLower(strings.TrimSpace(cfg.Settings.DefaultProtocol))
-			}
-			maxGroups := nn.MaxGroups
-			if maxGroups == 0 {
-				maxGroups = cfg.Settings.DefaultMaxGroups
-			}
-			user := strings.TrimSpace(nn.User)
+		dbCluster, exists := clusterByName[nname]
 
-			needProto := proto != strings.ToLower(strings.TrimSpace(dbn.Protocol))
-			needWeight := nn.Weight != dbn.Weight
-			needMax := maxGroups != dbn.MaxGroups
-			needUser := user != strings.TrimSpace(dbn.User)
-
-			if needProto || needWeight || needMax || needUser {
-				_, err := db.UpdateRows(conn, `
-UPDATE nodes SET protocol = ?, auth_user = ?, weight = ?, max_groups = ?
-WHERE cluster_id = ? AND host = ? AND port = ?
-`, proto, user, nn.Weight, maxGroups, dbc.Id, dbn.Host, dbn.Port)
-				if err != nil {
-					return fmt.Errorf("update node %s in cluster %s: %w", hostPort, cl.Name, err)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func normName(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
-
-func nodeUniqKey(protocol, host string, port int) string {
-	return fmt.Sprintf("%s|%s|%d",
-		strings.ToLower(strings.TrimSpace(protocol)),
-		strings.ToLower(strings.TrimSpace(host)),
-		port,
-	)
-}
-
-func CreateClusterAndNodes(create db.CreateClustersAndNodes, conn *sql.DB) error {
-	var na []db.NodeDataAll
-	var ca []db.ClusterName
-	for _, cluster := range create.Clusters {
-		ca = append(ca, cluster.Cluster)
-	}
-	clusters, createClustersErr := db.CreateClusters(conn, ca)
-	if createClustersErr != nil {
-		return createClustersErr
-	}
-	for i, cluster := range clusters {
-		for j := range create.Clusters[i].Nodes {
-			create.Clusters[i].Nodes[j].ClusterID = cluster.Id
-			na = append(na, create.Clusters[i].Nodes[j])
-		}
-	}
-	createNodesErr := db.InsertNodesIntoClusters(conn, na)
-	if createNodesErr != nil {
-		return createNodesErr
-	}
-
-	return nil
-}
-
-func BuildCreateDelta(create db.CreateClustersAndNodes, conn *sql.DB) (db.CreateClustersAndNodes, error) {
-	dbClusters, err := db.GetClusters(conn)
-	if err != nil && err != sql.ErrNoRows {
-		return db.CreateClustersAndNodes{}, fmt.Errorf("load clusters: %w", err)
-	}
-	dbNodes, err := db.GetNodes(conn)
-	if err != nil && err != sql.ErrNoRows {
-		return db.CreateClustersAndNodes{}, fmt.Errorf("load nodes: %w", err)
-	}
-
-	existingClusters := make(map[string]db.ClusterName, len(dbClusters))
-	for _, c := range dbClusters {
-		existingClusters[normName(c.Name)] = c
-	}
-
-	existingNodes := make(map[int]map[string]struct{})
-	for _, n := range dbNodes {
-		if _, ok := existingNodes[n.ClusterID]; !ok {
-			existingNodes[n.ClusterID] = make(map[string]struct{})
-		}
-		k := nodeUniqKey(n.Protocol, n.Host, n.Port)
-		existingNodes[n.ClusterID][k] = struct{}{}
-	}
-
-	var out db.CreateClustersAndNodes
-
-	for _, req := range create.Clusters {
-		nname := normName(req.Cluster.Name)
-		existing, clusterExists := existingClusters[nname]
-
-		if !clusterExists {
-			seen := make(map[string]struct{})
-			var newNodes []db.NodeDataAll
-			for _, n := range req.Nodes {
-				key := nodeUniqKey(n.Protocol, n.Host, n.Port)
-				if _, dup := seen[key]; dup {
-					continue
-				}
-				seen[key] = struct{}{}
-				newNodes = append(newNodes, n)
-			}
-			if len(newNodes) > 0 || true {
-				out.Clusters = append(out.Clusters, db.ClusterAndNodes{
-					Cluster: req.Cluster,
-					Nodes:   newNodes,
-				})
-			}
-			continue
-		}
-
-		exNodes := existingNodes[existing.Id]
-		seenNew := make(map[string]struct{})
-		var missing []db.NodeDataAll
-		for _, n := range req.Nodes {
-			key := nodeUniqKey(n.Protocol, n.Host, n.Port)
-			if _, dup := seenNew[key]; dup {
-				continue
-			}
-			seenNew[key] = struct{}{}
-			if exNodes != nil {
-				if _, ok := exNodes[key]; ok {
-					continue
-				}
-			}
-			missing = append(missing, n)
-		}
-		if len(missing) > 0 {
-			out.Clusters = append(out.Clusters, db.ClusterAndNodes{
-				Cluster: existing,
-				Nodes:   missing,
+		if !exists {
+			created, err := qtx.CreateCluster(ctx, sqlc.CreateClusterParams{
+				Name:        cfgCluster.Name,
+				Description: toNullString(cfgCluster.Description),
 			})
-		}
-	}
-
-	return out, nil
-}
-
-func SyncConfigWithDb(cfg Config) (Config, bool, error) {
-	conn, openErr := db.InitIfNeeded()
-	if openErr != nil {
-		return cfg, false, fmt.Errorf("DB open error: %v", openErr)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	dbClusters, err := db.GetClusters(conn)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return cfg, false, nil
-		}
-		return cfg, false, fmt.Errorf("error fetching clusters: %w", err)
-	}
-
-	dbNodes, err := db.GetNodes(conn)
-	if err != nil {
-		if err == sql.ErrNoRows {
-		} else {
-			return cfg, false, fmt.Errorf("error fetching nodes: %w", err)
-		}
-	}
-
-	updatedCfg, changed := MergeConfigWithDb(cfg, dbClusters, dbNodes)
-	return updatedCfg, changed, nil
-}
-
-func CheckConfigWithDb(cfg Config, verbose bool) (bool, error) {
-	conn, openErr := db.InitIfNeeded()
-	if openErr != nil {
-		if verbose {
-			fmt.Printf("DB open error: %v\n", openErr)
-		}
-		return false, fmt.Errorf("db open error: %w", openErr)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	dbClusters, err := db.GetClusters(conn)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return len(cfg.Clusters) == 0, nil
-		}
-		if verbose {
-			fmt.Printf("Error fetching clusters: %v\n", err)
-		}
-		return false, fmt.Errorf("error fetching clusters: %w", err)
-	}
-
-	dbNodes, err := db.GetNodes(conn)
-	if err != nil {
-		if err == sql.ErrNoRows {
-		} else {
-			if verbose {
-				fmt.Printf("Error fetching nodes: %v\n", err)
+			if err != nil {
+				return fmt.Errorf("create cluster %s: %w", cfgCluster.Name, err)
 			}
-			return false, fmt.Errorf("error fetching nodes: %w", err)
+			dbCluster = created
+		} else {
+			dbDesc := strings.TrimSpace(nullToString(dbCluster.Description))
+			cfgDesc := strings.TrimSpace(cfgCluster.Description)
+			if dbDesc != cfgDesc {
+				err := qtx.UpdateClusterDescription(ctx, sqlc.UpdateClusterDescriptionParams{
+					Description: toNullString(cfgDesc),
+					ClusterID:   dbCluster.ClusterID,
+				})
+				if err != nil {
+					return fmt.Errorf("update cluster %s desc: %w", cfgCluster.Name, err)
+				}
+			}
+		}
+
+		if err := syncNodes(ctx, qtx, cfg, cfgCluster, dbCluster.ClusterID, nodesByCluster[dbCluster.ClusterID]); err != nil {
+			return err
 		}
 	}
 
+	for _, dbCluster := range dbClusters {
+		if !configClusterNames[norm(dbCluster.Name)] {
+			nodes := nodesByCluster[dbCluster.ClusterID]
+			for _, n := range nodes {
+				if err := qtx.DeleteNode(ctx, n.NodeID); err != nil {
+					return fmt.Errorf("delete node %d: %w", n.NodeID, err)
+				}
+			}
+			if err := qtx.DeleteCluster(ctx, dbCluster.ClusterID); err != nil {
+				return fmt.Errorf("delete cluster %s: %w", dbCluster.Name, err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+func syncNodes(ctx context.Context, qtx *sqlc.Queries, cfg Config, cfgCluster Cluster, clusterID int64, dbNodes []sqlc.Node) error {
+	dbNodeByKey := make(map[string]sqlc.Node)
+	for _, n := range dbNodes {
+		dbNodeByKey[nodeKey(n.Host, int(n.Port))] = n
+	}
+
+	configNodeKeys := make(map[string]bool)
+
+	for _, cfgNode := range cfgCluster.Nodes {
+		key := nodeKey(cfgNode.Host, cfgNode.Port)
+		configNodeKeys[key] = true
+
+		proto := defaultStr(cfgNode.Protocol, cfg.Settings.DefaultProtocol, "http")
+		maxGroups := defaultInt(cfgNode.MaxGroups, cfg.Settings.DefaultMaxGroups)
+
+		dbNode, exists := dbNodeByKey[key]
+
+		if !exists {
+			_, err := qtx.InsertNodeIntoCluster(ctx, sqlc.InsertNodeIntoClusterParams{
+				ClusterID: clusterID,
+				Protocol:  proto,
+				Host:      cfgNode.Host,
+				Port:      int64(cfgNode.Port),
+				Weight:    int64(cfgNode.Weight),
+				MaxGroups: toNullInt64(maxGroups),
+				AuthUser:  cfgNode.User,
+			})
+			if err != nil {
+				return fmt.Errorf("insert node %s: %w", key, err)
+			}
+		} else {
+			needsUpdate := !equalStr(dbNode.Protocol, proto) ||
+				dbNode.Weight != int64(cfgNode.Weight) ||
+				nullToInt(dbNode.MaxGroups) != maxGroups ||
+				!equalStr(dbNode.AuthUser, cfgNode.User)
+
+			if needsUpdate {
+				err := qtx.UpdateNode(ctx, sqlc.UpdateNodeParams{
+					Protocol:  proto,
+					AuthUser:  cfgNode.User,
+					Weight:    int64(cfgNode.Weight),
+					MaxGroups: toNullInt64(maxGroups),
+					ClusterID: clusterID,
+					Host:      dbNode.Host,
+					Port:      dbNode.Port,
+				})
+				if err != nil {
+					return fmt.Errorf("update node %s: %w", key, err)
+				}
+			}
+		}
+	}
+
+	for _, dbNode := range dbNodes {
+		key := nodeKey(dbNode.Host, int(dbNode.Port))
+		if !configNodeKeys[key] {
+			if err := qtx.DeleteNode(ctx, dbNode.NodeID); err != nil {
+				return fmt.Errorf("delete node %s: %w", key, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func SyncConfigWithDb(ctx context.Context, cfg Config) (Config, bool, error) {
+	store, err := db.Init()
+	if err != nil {
+		return cfg, false, fmt.Errorf("db init: %w", err)
+	}
+	defer store.DB.Close()
+
+	var dbClusters []sqlc.Cluster
+	var dbNodes []sqlc.Node
+
+	err = store.ReadOnlyTx(ctx, func(q *sqlc.Queries) error {
+		var txErr error
+		dbClusters, txErr = q.GetClusters(ctx)
+		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
+			return txErr
+		}
+		dbNodes, txErr = q.GetNodes(ctx)
+		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
+			return txErr
+		}
+		return nil
+	})
+	if err != nil {
+		return cfg, false, fmt.Errorf("read db: %w", err)
+	}
+
+	return mergeConfigWithDb(cfg, dbClusters, dbNodes)
+}
+
+func CheckConfigWithDb(ctx context.Context, store *db.Store, cfg Config, verbose bool) (bool, error) {
+	var dbClusters []sqlc.Cluster
+	var dbNodes []sqlc.Node
+
+	err := store.ReadOnlyTx(ctx, func(q *sqlc.Queries) error {
+		var txErr error
+		dbClusters, txErr = q.GetClusters(ctx)
+		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
+			return txErr
+		}
+		dbNodes, txErr = q.GetNodes(ctx)
+		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
+			return txErr
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("read db: %w", err)
+	}
+
+	return compareConfig(cfg, dbClusters, dbNodes, verbose), nil
+}
+
+func PurgeConfig(cfg Config, ctx context.Context) error {
+	store, err := db.Init()
+	if err != nil {
+		return err
+	}
+	nukeErr := store.Queries.NukeEverything(ctx)
+	if nukeErr != nil {
+		return fmt.Errorf("nuke: %w", nukeErr)
+	}
+
+	return nil
+}
+
+func compareConfig(cfg Config, dbClusters []sqlc.Cluster, dbNodes []sqlc.Node, verbose bool) bool {
 	dbView := buildDbView(dbClusters, dbNodes)
 	cfgView := buildCfgView(cfg)
-
 	inSync := true
+
+	logMismatch := func(format string, args ...any) {
+		inSync = false
+		if verbose {
+			fmt.Printf("Mismatch: "+format+"\n", args...)
+		}
+	}
 
 	for name := range cfgView {
 		if _, found := dbView[name]; !found {
-			if verbose {
-				fmt.Printf("Mismatch: cluster %q exists in config but not in DB\n", name)
-			}
-			inSync = false
+			logMismatch("cluster %q in config but not DB", name)
 		}
 	}
 	for name := range dbView {
 		if _, found := cfgView[name]; !found {
-			if verbose {
-				fmt.Printf("Mismatch: cluster %q exists in DB but not in config\n", name)
-			}
-			inSync = false
+			logMismatch("cluster %q in DB but not config", name)
 		}
 	}
 
@@ -363,32 +272,18 @@ func CheckConfigWithDb(cfg Config, verbose bool) (bool, error) {
 			continue
 		}
 
-		cfgDesc := strings.TrimSpace(cv.Description)
-		dbDesc := ""
-		if dv.Description.Valid {
-			dbDesc = strings.TrimSpace(dv.Description.String)
-		}
-		if cfgDesc != dbDesc {
-			if verbose {
-				fmt.Printf("Mismatch: cluster %q description differs. cfg=%q db=%q\n", name, cfgDesc, dbDesc)
-			}
-			inSync = false
+		if strings.TrimSpace(cv.Description) != strings.TrimSpace(dv.Description) {
+			logMismatch("cluster %q description differs", name)
 		}
 
 		for key := range cv.Nodes {
 			if _, f := dv.Nodes[key]; !f {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s exists in config but not in DB\n", name, key)
-				}
-				inSync = false
+				logMismatch("cluster %q node %s in config but not DB", name, key)
 			}
 		}
 		for key := range dv.Nodes {
 			if _, f := cv.Nodes[key]; !f {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s exists in DB but not in config\n", name, key)
-				}
-				inSync = false
+				logMismatch("cluster %q node %s in DB but not config", name, key)
 			}
 		}
 
@@ -397,55 +292,32 @@ func CheckConfigWithDb(cfg Config, verbose bool) (bool, error) {
 			if !f {
 				continue
 			}
-			dbProto := dn.Protocol
-			if strings.TrimSpace(dbProto) == "" {
-				dbProto = cfg.Settings.DefaultProtocol
-			}
-			if !equalStr(cn.Protocol, dbProto) {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s protocol differs. cfg=%q db(effective)=%q\n", name, key, cn.Protocol, dbProto)
-				}
-				inSync = false
+
+			if !equalStr(cn.Protocol, dn.Protocol) {
+				logMismatch("cluster %q node %s protocol: cfg=%q db=%q", name, key, cn.Protocol, dn.Protocol)
 			}
 			if cn.Weight != dn.Weight {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s weight differs. cfg=%d db=%d\n", name, key, cn.Weight, dn.Weight)
-				}
-				inSync = false
+				logMismatch("cluster %q node %s weight: cfg=%d db=%d", name, key, cn.Weight, dn.Weight)
 			}
-			dbMax := dn.MaxGroups
-			if dbMax == 0 {
-				dbMax = cfg.Settings.DefaultMaxGroups
-			}
-			if cn.MaxGroups != dbMax {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s max_groups differs. cfg=%d db(effective)=%d\n", name, key, cn.MaxGroups, dbMax)
-				}
-				inSync = false
+			if cn.MaxGroups != dn.MaxGroups {
+				logMismatch("cluster %q node %s max_groups: cfg=%d db=%d", name, key, cn.MaxGroups, dn.MaxGroups)
 			}
 			if !equalStr(cn.User, dn.User) {
-				if verbose {
-					fmt.Printf("Mismatch: cluster %q node %s user differs. cfg=%q db=%q\n", name, key, cn.User, dn.User)
-				}
-				inSync = false
+				logMismatch("cluster %q node %s user: cfg=%q db=%q", name, key, cn.User, dn.User)
 			}
 		}
 	}
 
-	return inSync, nil
+	return inSync
 }
 
-func MergeConfigWithDb(
-	cfg Config,
-	dbClusters []db.ClusterName,
-	dbNodes []db.NodeDataAll,
-) (Config, bool) {
-	cfgView := buildCfgView(cfg)
-
-	nodesByCluster := make(map[int][]db.NodeDataAll)
-	for _, node := range dbNodes {
-		nodesByCluster[node.ClusterID] = append(nodesByCluster[node.ClusterID], node)
+func mergeConfigWithDb(cfg Config, dbClusters []sqlc.Cluster, dbNodes []sqlc.Node) (Config, bool, error) {
+	nodesByCluster := make(map[int64][]sqlc.Node)
+	for _, n := range dbNodes {
+		nodesByCluster[n.ClusterID] = append(nodesByCluster[n.ClusterID], n)
 	}
+
+	cfgView := buildCfgView(cfg)
 
 	rebuilt := Config{
 		Settings: cfg.Settings,
@@ -456,81 +328,126 @@ func MergeConfigWithDb(
 		nname := norm(dbCluster.Name)
 		existing := cfgView[nname]
 
-		desc := strings.TrimSpace(existing.Description)
-		if dbCluster.Desc.Valid {
-			desc = strings.TrimSpace(dbCluster.Desc.String)
+		desc := nullToString(dbCluster.Description)
+		if desc == "" {
+			desc = existing.Description
 		}
 
-		dbNodeSlice := append([]db.NodeDataAll(nil), nodesByCluster[dbCluster.Id]...)
-		sort.Slice(dbNodeSlice, func(i, j int) bool {
-			if !equalStr(dbNodeSlice[i].Host, dbNodeSlice[j].Host) {
-				return strings.ToLower(strings.TrimSpace(dbNodeSlice[i].Host)) < strings.ToLower(strings.TrimSpace(dbNodeSlice[j].Host))
+		clusterNodes := nodesByCluster[dbCluster.ClusterID]
+		sort.Slice(clusterNodes, func(i, j int) bool {
+			if clusterNodes[i].Host != clusterNodes[j].Host {
+				return clusterNodes[i].Host < clusterNodes[j].Host
 			}
-			return dbNodeSlice[i].Port < dbNodeSlice[j].Port
+			return clusterNodes[i].Port < clusterNodes[j].Port
 		})
 
-		nodes := make([]Node, 0, len(dbNodeSlice))
-		for _, dbNode := range dbNodeSlice {
-			key := nodeKey(dbNode.Host, dbNode.Port)
+		nodes := make([]Node, 0, len(clusterNodes))
+		for _, dbNode := range clusterNodes {
+			key := nodeKey(dbNode.Host, int(dbNode.Port))
 			existingNode := existing.Nodes[key]
 
-			proto := strings.TrimSpace(dbNode.Protocol)
+			proto := strings.ToLower(strings.TrimSpace(dbNode.Protocol))
 			if proto == "" {
-				proto = strings.TrimSpace(existingNode.Protocol)
+				proto = defaultStr(existingNode.Protocol, cfg.Settings.DefaultProtocol, "http")
 			}
-			if proto == "" {
-				proto = strings.TrimSpace(cfg.Settings.DefaultProtocol)
-			}
-			if proto == "" {
-				proto = "http"
-			}
-			proto = strings.ToLower(proto)
 
-			maxGroups := dbNode.MaxGroups
+			maxGroups := nullToInt(dbNode.MaxGroups)
 			if maxGroups == 0 {
-				if existingNode.MaxGroups != 0 {
-					maxGroups = existingNode.MaxGroups
-				} else if cfg.Settings.DefaultMaxGroups != 0 {
-					maxGroups = cfg.Settings.DefaultMaxGroups
-				} else {
-					maxGroups = 3
-				}
+				maxGroups = defaultInt(existingNode.MaxGroups, cfg.Settings.DefaultMaxGroups)
 			}
 
-			user := strings.TrimSpace(dbNode.User)
+			user := strings.TrimSpace(dbNode.AuthUser)
 			if user == "" {
-				user = strings.TrimSpace(existingNode.User)
+				user = existingNode.User
 			}
 
 			nodes = append(nodes, Node{
 				Host:      strings.ToLower(strings.TrimSpace(dbNode.Host)),
-				Port:      dbNode.Port,
+				Port:      int(dbNode.Port),
 				Protocol:  proto,
-				Weight:    dbNode.Weight,
+				Weight:    int(dbNode.Weight),
 				MaxGroups: maxGroups,
 				User:      user,
 			})
 		}
 
-		name := strings.TrimSpace(dbCluster.Name)
-		if name == "" {
-			name = nname
-		}
-
 		rebuilt.Clusters = append(rebuilt.Clusters, Cluster{
-			Name:        name,
+			Name:        dbCluster.Name,
 			Description: desc,
 			Nodes:       nodes,
 		})
 	}
 
 	sort.Slice(rebuilt.Clusters, func(i, j int) bool {
-		return strings.ToLower(rebuilt.Clusters[i].Name) < strings.ToLower(rebuilt.Clusters[j].Name)
+		return norm(rebuilt.Clusters[i].Name) < norm(rebuilt.Clusters[j].Name)
 	})
 
 	changed := !reflect.DeepEqual(normalizeConfig(cfg), normalizeConfig(rebuilt))
+	return rebuilt, changed, nil
+}
 
-	return rebuilt, changed
+type clusterView struct {
+	Description string
+	Nodes       map[string]nodeView
+}
+
+type nodeView struct {
+	Protocol  string
+	Weight    int
+	MaxGroups int
+	User      string
+}
+
+func buildDbView(clusters []sqlc.Cluster, nodes []sqlc.Node) map[string]clusterView {
+	res := make(map[string]clusterView, len(clusters))
+
+	idToName := make(map[int64]string)
+	for _, c := range clusters {
+		nname := norm(c.Name)
+		idToName[c.ClusterID] = nname
+		res[nname] = clusterView{
+			Description: nullToString(c.Description),
+			Nodes:       make(map[string]nodeView),
+		}
+	}
+
+	for _, n := range nodes {
+		clusterName, ok := idToName[n.ClusterID]
+		if !ok {
+			continue
+		}
+		key := nodeKey(n.Host, int(n.Port))
+		res[clusterName].Nodes[key] = nodeView{
+			Protocol:  strings.ToLower(strings.TrimSpace(n.Protocol)),
+			Weight:    int(n.Weight),
+			MaxGroups: nullToInt(n.MaxGroups),
+			User:      strings.TrimSpace(n.AuthUser),
+		}
+	}
+	return res
+}
+
+func buildCfgView(cfg Config) map[string]clusterView {
+	res := make(map[string]clusterView)
+
+	for _, c := range cfg.Clusters {
+		cv := clusterView{
+			Description: strings.TrimSpace(c.Description),
+			Nodes:       make(map[string]nodeView),
+		}
+
+		for _, n := range c.Nodes {
+			key := nodeKey(n.Host, n.Port)
+			cv.Nodes[key] = nodeView{
+				Protocol:  strings.ToLower(defaultStr(n.Protocol, cfg.Settings.DefaultProtocol, "http")),
+				Weight:    n.Weight,
+				MaxGroups: defaultInt(n.MaxGroups, cfg.Settings.DefaultMaxGroups),
+				User:      strings.TrimSpace(n.User),
+			}
+		}
+		res[norm(c.Name)] = cv
+	}
+	return res
 }
 
 func normalizeConfig(cfg Config) Config {
@@ -540,150 +457,40 @@ func normalizeConfig(cfg Config) Config {
 	}
 
 	for i, cl := range cfg.Clusters {
-		normCluster := Cluster{
-			Name:        strings.TrimSpace(cl.Name),
-			Description: strings.TrimSpace(cl.Description),
-			Nodes:       make([]Node, len(cl.Nodes)),
-		}
-
-		for j, node := range cl.Nodes {
-			normCluster.Nodes[j] = Node{
-				Host:      strings.ToLower(strings.TrimSpace(node.Host)),
-				Port:      node.Port,
-				Protocol:  strings.ToLower(strings.TrimSpace(node.Protocol)),
-				Weight:    node.Weight,
-				MaxGroups: node.MaxGroups,
-				User:      strings.TrimSpace(node.User),
+		nodes := make([]Node, len(cl.Nodes))
+		for j, n := range cl.Nodes {
+			nodes[j] = Node{
+				Host:      strings.ToLower(strings.TrimSpace(n.Host)),
+				Port:      n.Port,
+				Protocol:  strings.ToLower(strings.TrimSpace(n.Protocol)),
+				Weight:    n.Weight,
+				MaxGroups: n.MaxGroups,
+				User:      strings.TrimSpace(n.User),
 			}
 		}
-
-		sort.Slice(normCluster.Nodes, func(a, b int) bool {
-			if normCluster.Nodes[a].Host == normCluster.Nodes[b].Host {
-				return normCluster.Nodes[a].Port < normCluster.Nodes[b].Port
+		sort.Slice(nodes, func(a, b int) bool {
+			if nodes[a].Host != nodes[b].Host {
+				return nodes[a].Host < nodes[b].Host
 			}
-			return normCluster.Nodes[a].Host < normCluster.Nodes[b].Host
+			return nodes[a].Port < nodes[b].Port
 		})
 
-		normalized.Clusters[i] = normCluster
+		normalized.Clusters[i] = Cluster{
+			Name:        strings.TrimSpace(cl.Name),
+			Description: strings.TrimSpace(cl.Description),
+			Nodes:       nodes,
+		}
 	}
 
 	sort.Slice(normalized.Clusters, func(i, j int) bool {
-		return strings.ToLower(normalized.Clusters[i].Name) < strings.ToLower(normalized.Clusters[j].Name)
+		return norm(normalized.Clusters[i].Name) < norm(normalized.Clusters[j].Name)
 	})
 
 	return normalized
 }
 
-type dbClusterView struct {
-	Description sql.NullString
-	Nodes       map[string]dbNode
-}
-
-type dbNode struct {
-	Protocol  string
-	Weight    int
-	MaxGroups int
-	User      string
-}
-
-type cfgClusterView struct {
-	Description string
-	Nodes       map[string]cfgNode
-}
-
-type cfgNode struct {
-	Protocol  string
-	Weight    int
-	MaxGroups int
-	User      string
-}
-
-func buildDbView(clusters []db.ClusterName, nodes []db.NodeDataAll) map[string]dbClusterView {
-	idToMeta := make(map[int]db.ClusterName, len(clusters))
-	for _, c := range clusters {
-		idToMeta[c.Id] = c
-	}
-	res := make(map[string]dbClusterView, len(clusters))
-	for _, c := range clusters {
-		res[norm(c.Name)] = dbClusterView{
-			Description: c.Desc,
-			Nodes:       make(map[string]dbNode),
-		}
-	}
-	for _, n := range nodes {
-		meta, ok := idToMeta[n.ClusterID]
-		name := "unknown"
-		if ok {
-			name = norm(meta.Name)
-		}
-		entry := res[name]
-		if entry.Nodes == nil {
-			entry.Nodes = make(map[string]dbNode)
-		}
-
-		key := nodeKey(n.Host, n.Port)
-
-		entry.Nodes[key] = dbNode{
-			Protocol:  strings.ToLower(n.Protocol),
-			Weight:    n.Weight,
-			MaxGroups: n.MaxGroups,
-			User:      n.User,
-		}
-		res[name] = entry
-	}
-	return res
-}
-
-func buildCfgView(cfg Config) map[string]cfgClusterView {
-	res := make(map[string]cfgClusterView)
-
-	for _, c := range cfg.Clusters {
-		nname := norm(c.Name)
-
-		cv, ok := res[nname]
-		if !ok {
-			cv = cfgClusterView{
-				Description: strings.TrimSpace(c.Description),
-				Nodes:       make(map[string]cfgNode),
-			}
-		} else {
-			if cv.Description == "" && strings.TrimSpace(c.Description) != "" {
-				cv.Description = strings.TrimSpace(c.Description)
-			}
-		}
-
-		for _, n := range c.Nodes {
-			proto := n.Protocol
-			if proto == "" {
-				proto = cfg.Settings.DefaultProtocol
-			}
-			maxGroups := n.MaxGroups
-			if maxGroups == 0 {
-				maxGroups = cfg.Settings.DefaultMaxGroups
-			}
-
-			key := nodeKey(n.Host, n.Port)
-			if _, exists := cv.Nodes[key]; !exists {
-				cv.Nodes[key] = cfgNode{
-					Protocol:  strings.ToLower(proto),
-					Weight:    n.Weight,
-					MaxGroups: maxGroups,
-					User:      n.User,
-				}
-			}
-		}
-
-		res[nname] = cv
-	}
-
-	return res
-}
-
 func nodeKey(host string, port int) string {
-	return fmt.Sprintf("%s:%d",
-		strings.ToLower(strings.TrimSpace(host)),
-		port,
-	)
+	return fmt.Sprintf("%s:%d", strings.ToLower(strings.TrimSpace(host)), port)
 }
 
 func norm(s string) string {
@@ -692,4 +499,46 @@ func norm(s string) string {
 
 func equalStr(a, b string) bool {
 	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+func toNullString(s string) sql.NullString {
+	s = strings.TrimSpace(s)
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
+func nullToString(ns sql.NullString) string {
+	if ns.Valid {
+		return ns.String
+	}
+	return ""
+}
+
+func toNullInt64(i int) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(i), Valid: i != 0}
+}
+
+func nullToInt(ni sql.NullInt64) int {
+	if ni.Valid {
+		return int(ni.Int64)
+	}
+	return 0
+}
+
+func defaultStr(val, fallback, fallback2 string) string {
+	val = strings.TrimSpace(val)
+	if val != "" {
+		return strings.ToLower(val)
+	}
+	fallback = strings.TrimSpace(fallback)
+	if fallback != "" {
+		return strings.ToLower(fallback)
+	}
+	return strings.ToLower(fallback2)
+}
+
+func defaultInt(val, fallback int) int {
+	if val != 0 {
+		return val
+	}
+	return fallback
 }

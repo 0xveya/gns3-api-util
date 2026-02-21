@@ -276,7 +276,7 @@ func GetPasswordFromInput() (string, error) {
 func EditTextWithEditor(text string, ext string) (string, error) {
 	tmpFile, err := os.CreateTemp("", "gns3util-edit-*."+ext)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file: %v", err)
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	defer func() {
 		if err := os.Remove(tmpFile.Name()); err != nil {
@@ -285,7 +285,7 @@ func EditTextWithEditor(text string, ext string) (string, error) {
 	}()
 
 	if _, err := tmpFile.WriteString(text); err != nil {
-		return "", fmt.Errorf("failed to write to temporary file: %v", err)
+		return "", fmt.Errorf("failed to write to temporary file: %w", err)
 	}
 	_ = tmpFile.Close()
 
@@ -331,12 +331,12 @@ func EditTextWithEditor(text string, ext string) (string, error) {
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return "", fmt.Errorf("failed to run editor: %v", err)
+			return "", fmt.Errorf("failed to run editor: %w", err)
 		}
 
 		editedContent, err := os.ReadFile(tmpFile.Name())
 		if err != nil {
-			return "", fmt.Errorf("failed to read edited file: %v", err)
+			return "", fmt.Errorf("failed to read edited file: %w", err)
 		}
 
 		return string(editedContent), nil
@@ -347,12 +347,12 @@ func EditTextWithEditor(text string, ext string) (string, error) {
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return "", fmt.Errorf("failed to run editor: %v", err)
+			return "", fmt.Errorf("failed to run editor: %w", err)
 		}
 
 		editedContent, err := os.ReadFile(tmpFile.Name())
 		if err != nil {
-			return "", fmt.Errorf("failed to read edited file: %v", err)
+			return "", fmt.Errorf("failed to read edited file: %w", err)
 		}
 
 		return string(editedContent), nil

@@ -10,17 +10,18 @@ import (
 )
 
 func NewGetAppliancesCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get available appliances",
 		Long:    `Get available appliances`,
 		Example: "gns3util -s https://controller:3080 appliance ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getAppliances", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -29,7 +30,7 @@ func NewGetAppliancesCmd() *cobra.Command {
 func NewGetApplianceCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [appliance-name/id]",
 		Short:   "Get an appliance by name or id",
 		Long:    `Get an appliance by name or id`,
@@ -52,30 +53,28 @@ func NewGetApplianceCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getAppliances", "name", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
-
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "appliance", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getAppliance", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find an appliance")

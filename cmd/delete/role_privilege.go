@@ -15,30 +15,28 @@ func NewDeleteRolePrivilegeCmd() *cobra.Command {
 		Long:    `Delete a privilege from a role on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 role role-privilege my-role privilege-id",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			roleID := args[0]
 			privilegeID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(roleID) {
 				id, err := utils.ResolveID(cfg, "role", roleID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				roleID = id
 			}
 
 			if !utils.IsValidUUIDv4(privilegeID) {
-				fmt.Println("Privilege ID must be a valid UUID")
-				return
+				return fmt.Errorf("privilege ID must be a valid UUID")
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteRolePrivilege", []string{roleID, privilegeID})
+			return nil
 		},
 	}
 

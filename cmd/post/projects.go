@@ -9,25 +9,25 @@ import (
 )
 
 func NewLockProjectCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "lock-project",
 		Short: "Lock a project by id or name",
 		Long:  `Lock a project by id or name`,
 		Args:  cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 			utils.ExecuteAndPrint(cfg, "lockProject", []string{id})
+			return nil
 		},
 	}
 	return cmd

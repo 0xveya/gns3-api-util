@@ -12,7 +12,6 @@ func NewSymbolCmdGroup() *cobra.Command {
 		Long:  `Get and manage GNS3 symbols.`,
 	}
 
-	// Get subcommands
 	symbolCmd.AddCommand(get.NewGetSymbolsCmd())
 	symbolCmd.AddCommand(get.NewGetSymbolCmd())
 	symbolCmd.AddCommand(get.NewGetSymbolDimensionsCmd())

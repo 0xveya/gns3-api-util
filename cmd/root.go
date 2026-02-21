@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/carapace-sh/carapace"
 	"github.com/spf13/cobra"
 	"github.com/stefanistkuhl/gns3util/cmd/auth"
 	"github.com/stefanistkuhl/gns3util/cmd/class"
 	"github.com/stefanistkuhl/gns3util/cmd/exercise"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
+	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
 var (
@@ -20,7 +21,7 @@ var (
 	version  bool
 )
 
-var Version = "1.2.8"
+var Version = "1.2.9"
 
 var Foo bool
 
@@ -73,16 +74,17 @@ var rootCmd = &cobra.Command{
 
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if version {
 			fmt.Printf("gns3util version %s\n", Version)
-			os.Exit(0)
+			return nil
 		}
-		_ = cmd.Help()
+		return cmd.Help()
 	},
 }
 
 func init() {
+	carapace.Gen(rootCmd)
 	cobra.OnFinalize()
 	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "GNS3v3 Server URL (required for non cluster commands)")
 	rootCmd.PersistentFlags().StringVarP(&keyFile, "key-file", "k", "", "Set a location for a keyfile to use")
@@ -120,11 +122,15 @@ func init() {
 
 	rootCmd.AddCommand(NewClusterCmdGroup())
 	rootCmd.AddCommand(NewShareCmdGroup())
+	carapace.Gen(rootCmd).FlagCompletion(carapace.ActionMap{
+		"key-file": carapace.ActionFiles(),
+		"server":   carapace.ActionValues("http://localhost:3080", "https://gns3.example.com"),
+	})
 }
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Printf("%v\n", err)
+		fmt.Printf("%v\n", messageUtils.ErrorMsg(err.Error()))
 	}
 }
 

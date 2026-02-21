@@ -10,17 +10,18 @@ import (
 )
 
 func NewGetSymbolsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get the available symbols",
 		Long:    `Get the available symbols`,
 		Example: "gns3util -s https://controller:3080 symbol ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getSymbols", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -29,7 +30,7 @@ func NewGetSymbolsCmd() *cobra.Command {
 func NewGetSymbolCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [symbol-id]",
 		Short:   "Get a symbol by id",
 		Long:    `Get a symbol by id`,
@@ -52,29 +53,28 @@ func NewGetSymbolCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getSymbols", "symbol_id", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "symbol", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getSymbol", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a symbol")
@@ -85,7 +85,7 @@ func NewGetSymbolCmd() *cobra.Command {
 func NewGetSymbolDimensionsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "dimensions [symbol-id]",
 		Short:   "Get the dimensions of a symbol by id",
 		Long:    `Get the dimensions of a symbol by id`,
@@ -108,29 +108,28 @@ func NewGetSymbolDimensionsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getSymbols", "symbol_id", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "symbol", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getSymbolDimensions", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a symbol")
@@ -139,17 +138,18 @@ func NewGetSymbolDimensionsCmd() *cobra.Command {
 }
 
 func NewGetDefaultSymbolsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "defaults",
 		Short:   "Get the available default-symbols",
 		Long:    `Get the available symbols`,
 		Example: "gns3util -s https://controller:3080 symbol defaults",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getDefaultSymbols", nil)
+			return nil
 		},
 	}
 	return cmd

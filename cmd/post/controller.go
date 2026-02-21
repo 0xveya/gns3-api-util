@@ -29,14 +29,14 @@ func NewReloadCmd() *cobra.Command {
 		Short:   "Reload the controller",
 		Long:    `Reload the GNS3 controller.`,
 		Example: `gns3util -s https://controller:3080 post controller reload`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			utils.ExecuteAndPrint(cfg, "reloadController", nil)
+			return nil
 		},
 	}
 
@@ -49,14 +49,14 @@ func NewShutdownCmd() *cobra.Command {
 		Short:   "Shutdown the server",
 		Long:    `Shutdown the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post controller shutdown`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			utils.ExecuteAndPrint(cfg, "shutdownController", nil)
+			return nil
 		},
 	}
 

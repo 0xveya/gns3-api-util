@@ -16,21 +16,16 @@ func NewGroupCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 groups.`,
 	}
 
-	// Create subcommands
 	groupCmd.AddCommand(create.NewCreateGroupCmd())
 
-	// Get subcommands
 	groupCmd.AddCommand(get.NewGetGroupCmd())
 	groupCmd.AddCommand(get.NewGetGroupsCmd())
 	groupCmd.AddCommand(get.NewGetGroupMembersCmd())
 
-	// Update subcommands
 	groupCmd.AddCommand(update.NewUpdateGroupCmd())
 
-	// Delete subcommands
 	groupCmd.AddCommand(delete.NewDeleteGroupCmd())
 
-	// Add subcommands
 	groupCmd.AddCommand(add.NewAddGroupMemberCmd())
 
 	return groupCmd

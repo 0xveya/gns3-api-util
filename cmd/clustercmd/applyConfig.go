@@ -15,25 +15,24 @@ func NewApplyConfigCmd() *cobra.Command {
 		Use:   "apply",
 		Short: "apply your config file to the local database",
 		Long:  `apply your config file to the local database`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfgLoaded, err := cluster.LoadClusterConfig()
 			if err != nil {
-				fmt.Printf("%s failed to load config: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to load config: %w", err)
 			}
 
 			if !noConfirm {
 				if !utils.ConfirmPrompt(fmt.Sprintf("%s do you want to apply this config to the Database?", messageUtils.WarningMsg("Warning")), false) {
-					return
+					return nil
 				}
 			}
 
 			applyErr := cluster.ApplyConfig(cfgLoaded)
 			if applyErr != nil {
-				fmt.Printf("%s %v\n", messageUtils.ErrorMsg("Error applying config"), applyErr)
-				return
+				return fmt.Errorf("error applying config: %w", applyErr)
 			}
 			fmt.Printf("%s applied config to the Database.\n", messageUtils.SuccessMsg("Success"))
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&noConfirm, "no-confirm", "n", false, "Run the command without asking for confirmations.")

@@ -1,19 +1,20 @@
 package class
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/spf13/cobra"
-
 	"github.com/stefanistkuhl/gns3util/pkg/api/schemas"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/class"
-	"github.com/stefanistkuhl/gns3util/pkg/utils/errorUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/server"
 )
@@ -21,7 +22,7 @@ import (
 var interactive bool
 
 func NewCreateClassCmd() *cobra.Command {
-	var createClassCmd = &cobra.Command{
+	createClassCmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a class with students and groups",
 		Long: `Create a class with students and groups. This command can either:
@@ -45,13 +46,13 @@ The class structure includes:
 			filePath, _ := cmd.Flags().GetString("file")
 
 			if serverUrl != "" && cluster != "" {
-				return errorUtils.FormatError("cannot specify both --cluster and --server")
+				return fmt.Errorf("cannot specify both --cluster and --server")
 			}
 			if serverUrl == "" && cluster == "" {
-				return errorUtils.FormatError("either --cluster or --server must be specified")
+				return fmt.Errorf("either --cluster or --server must be specified")
 			}
 			if filePath == "" && !interactive {
-				return errorUtils.FormatError("either --file or --interactive must be specified")
+				return fmt.Errorf("either --file or --interactive must be specified")
 			}
 			return nil
 		},
@@ -86,14 +87,12 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 		var err error
 		classData, err = server.StartInteractiveServer(host, port)
 		if err != nil {
-			fmt.Printf("%v\n", err)
 			return err
 		}
 	} else {
 		var err error
 		classData, err = class.LoadClassFromFile(filePath)
 		if err != nil {
-			fmt.Printf("%v\n", err)
 			return err
 		}
 	}
@@ -119,9 +118,7 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 		clusterName = fmt.Sprintf("%s%s", urlObj.Hostname(), "_single_node_cluster")
 		port, convErr := strconv.Atoi(urlObj.Port())
 		if convErr != nil {
-			err := errorUtils.WrapError(convErr, "failed to convert port to int")
-			fmt.Printf("%v\n", err)
-			return err
+			return fmt.Errorf("failed to convert port to int: %w", convErr)
 		}
 		nodeData.Protocol = urlObj.Scheme
 		nodeData.Host = urlObj.Hostname()
@@ -131,75 +128,78 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 		nodeData.User = user
 	}
 
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
-		err = errorUtils.WrapError(err, "failed to initialize database")
-		fmt.Printf("%v\n", err)
-		return err
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
+	ctx := context.Background()
+	tx, err := store.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	defer func() {
-		_ = conn.Close()
+		if err != nil {
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				err = fmt.Errorf("failed to rollback transaction: %w", rollbackErr)
+			}
+		}
 	}()
 
-	err = db.CheckIfCluterExists(clusterName)
+	qtx := store.WithTx(tx)
+
+	exists, err := qtx.CheckIfClusterExists(ctx, clusterName)
 	if err != nil {
-		if err == db.ErrClusterExists {
-			clusterExists = true
-		} else if err != db.ErrNoDb {
-			err = errorUtils.WrapError(err, "failed to check if cluster exists")
-			fmt.Printf("%v\n", err)
-			return err
-		}
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+	if exists == 1 {
+		clusterExists = true
 	}
 
-	var info []db.ClusterName
 	var clusterID int
 
 	if !clusterExists && noCluster {
-		info, err = db.CreateClusters(conn, []db.ClusterName{{Name: clusterName}})
+		clusterData, err := qtx.CreateCluster(ctx, sqlc.CreateClusterParams{Name: clusterName})
 		if err != nil {
-			err = errorUtils.WrapError(err, "failed to create cluster")
-			fmt.Printf("%v\n", err)
-			return err
+			return fmt.Errorf("failed to create cluster: %w", err)
 		}
-		clusterID = info[0].Id
+		clusterID = int(clusterData.ClusterID)
 	} else {
-		clusters, err := db.GetClusters(conn)
+		clusters, err := qtx.GetClusters(ctx)
 		if err != nil {
-			err = errorUtils.WrapError(err, "failed to get existing clusters")
-			fmt.Printf("%v\n", err)
-			return err
+			return fmt.Errorf("failed to get existing clusters: %w", err)
 		}
 		for _, cluster := range clusters {
 			if cluster.Name == clusterName {
-				clusterID = cluster.Id
+				clusterID = int(cluster.ClusterID)
 				break
 			}
 		}
 		if clusterID == 0 {
-			err = errorUtils.WrapError(fmt.Errorf("cluster %s exists but ID not found", clusterName), "cluster ID not found")
-			fmt.Printf("%v\n", err)
-			return err
+			return fmt.Errorf("cluster ID not found: cluster %s exists but ID not found", clusterName)
 		}
 	}
 
-	err = db.CheckIfNodeExists(conn, clusterID, nodeData.Host, nodeData.Port)
+	nodeExistsRes, err := qtx.CheckIfNodeExists(ctx, sqlc.CheckIfNodeExistsParams{ClusterID: int64(clusterID), Host: nodeData.Host, Port: int64(nodeData.Port)})
 	if err != nil {
-		if err == db.ErrNodeExists {
-			nodeExists = true
-		} else {
-			err = errorUtils.WrapError(err, "failed to check if node exists")
-			fmt.Printf("%v\n", err)
-			return err
-		}
+		return fmt.Errorf("failed to check if node exists: %w", err)
 	}
-	var insertedNodes []db.NodeDataAll
+	if nodeExistsRes == 1 {
+		nodeExists = true
+	}
+	var insertedNodes []sqlc.Node
 	if noCluster {
 		if !nodeExists {
-			if _, err := db.InsertNodes(clusterID, []db.NodeData{nodeData}); err != nil {
-				err = errorUtils.WrapError(err, "failed to create node")
-				fmt.Printf("%v\n", err)
-				return err
+			var maxGroups sql.NullInt64
+			if nodeData.MaxGroups == 0 {
+				maxGroups = sql.NullInt64{Int64: 0, Valid: false}
+			} else {
+				maxGroups = sql.NullInt64{Int64: int64(nodeData.MaxGroups), Valid: true}
+			}
+			sqlcNodeData := sqlc.InsertNodeParams{ClusterID: int64(clusterID), Host: nodeData.Host, Port: int64(nodeData.Port), Weight: int64(nodeData.Weight), MaxGroups: maxGroups, AuthUser: nodeData.User}
+			if err := qtx.InsertNode(ctx, sqlcNodeData); err != nil {
+				return fmt.Errorf("failed to create node: %w", err)
 			}
 		}
 
@@ -211,7 +211,7 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 				return cfgErr
 			}
 		}
-		updatedCfg, changed, syncErr := cluster.SyncConfigWithDb(currentCfg)
+		updatedCfg, changed, syncErr := cluster.SyncConfigWithDb(cmd.Context(), currentCfg)
 		if syncErr != nil {
 			return syncErr
 		}
@@ -221,40 +221,42 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		allNodes, getNodesErr := db.GetNodes(conn)
+		allNodes, getNodesErr := qtx.GetNodes(ctx)
 		if getNodesErr != nil {
-			getNodesErr = errorUtils.WrapError(getNodesErr, "failed to get nodes for cluster")
-			fmt.Printf("%v\n", getNodesErr)
-			return getNodesErr
+			return fmt.Errorf("failed to get nodes for cluster: %w", getNodesErr)
 		}
-		filteredNodes := []db.NodeDataAll{}
+		filteredNodes := []sqlc.Node{}
 		for _, node := range allNodes {
-			if node.ClusterID == clusterID {
+			if int(node.ClusterID) == clusterID {
 				filteredNodes = append(filteredNodes, node)
 			}
 		}
 		insertedNodes = filteredNodes
 	} else {
-		allNodes, getNodesErr := db.GetNodes(conn)
+		allNodes, getNodesErr := qtx.GetNodes(ctx)
 		if getNodesErr != nil {
-			getNodesErr = errorUtils.WrapError(getNodesErr, "failed to get nodes for cluster")
-			fmt.Printf("%v\n", getNodesErr)
-			return getNodesErr
+			return fmt.Errorf("failed to get nodes for cluster: %w", getNodesErr)
 		}
-		filteredNodes := []db.NodeDataAll{}
+		filteredNodes := []sqlc.Node{}
 		for _, node := range allNodes {
-			if node.ClusterID == clusterID {
+			if int(node.ClusterID) == clusterID {
 				filteredNodes = append(filteredNodes, node)
 			}
 		}
 		insertedNodes = filteredNodes
 	}
 
-	success, err := class.CreateClass(cfg, clusterID, classData, insertedNodes)
+	var nodes []db.NodeDataAll
+	for _, node := range insertedNodes {
+		nodes = append(nodes, db.NodeDataAll{ClusterID: int(node.ClusterID), Host: node.Host, Port: int(node.Port), Weight: int(node.Weight), MaxGroups: int(node.MaxGroups.Int64)})
+	}
+	commitErr := tx.Commit()
+	if commitErr != nil {
+		return fmt.Errorf("failed to commit transaction: %w", commitErr)
+	}
+	success, err := class.CreateClass(cfg, clusterID, classData, nodes)
 	if err != nil {
-		err = errorUtils.WrapError(err, "failed to create class")
-		fmt.Printf("%v\n", err)
-		return err
+		return fmt.Errorf("failed to create class: %w", err)
 	}
 
 	if success {

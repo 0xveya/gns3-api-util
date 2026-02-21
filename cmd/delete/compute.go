@@ -15,24 +15,23 @@ func NewDeleteComputeCmd() *cobra.Command {
 		Long:    `Delete a compute from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 compute delete my-compute",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			computeID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(computeID) {
 				id, err := utils.ResolveID(cfg, "compute", computeID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				computeID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteCompute", []string{computeID})
+			return nil
 		},
 	}
 

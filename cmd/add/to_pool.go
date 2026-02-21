@@ -15,20 +15,18 @@ func NewAddToPoolCmd() *cobra.Command {
 		Long:    `Add a resource (like a project) to a pool on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 pool to-pool my-pool my-project",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			poolID := args[0]
 			projectID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(poolID) {
 				id, err := utils.ResolveID(cfg, "pool", poolID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				poolID = id
 			}
@@ -36,13 +34,13 @@ func NewAddToPoolCmd() *cobra.Command {
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "addToPool", []string{poolID, projectID})
+			return nil
 		},
 	}
 

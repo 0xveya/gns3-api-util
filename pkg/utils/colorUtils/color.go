@@ -17,7 +17,7 @@ var (
 
 	Info = color.New(color.FgBlue).SprintfFunc()
 
-	Seperator = color.New(color.FgHiBlack).SprintfFunc()
+	Separator = color.New(color.FgHiBlack).SprintfFunc()
 )
 
 func Emphasize(s string) string {

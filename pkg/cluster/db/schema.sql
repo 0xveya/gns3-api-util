@@ -1,60 +1,64 @@
-create table clusters(
-	cluster_id integer primary key autoincrement,
-	name text not null unique,
-	description text
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE clusters(
+    cluster_id integer PRIMARY KEY autoincrement,
+    name text NOT NULL UNIQUE,
+    description text
 );
 
-create table nodes (
-	node_id integer primary key autoincrement,
-	cluster_id integer not null,
-	protocol text check (protocol in ('http','https')) not null,
-	auth_user text not null,
-	host text not null,
-	port integer not null,
-	weight integer not null default 5 check (weight between 0 and 10),
-	max_groups integer default 3
-	-- unique(protocol, host, port)
+CREATE TABLE nodes (
+    node_id integer PRIMARY KEY autoincrement,
+    cluster_id integer NOT NULL,
+    protocol text CHECK (protocol IN ('http', 'https')) NOT NULL,
+    auth_user text NOT NULL,
+    host text NOT NULL,
+    port integer NOT NULL,
+    weight integer NOT NULL DEFAULT 5 CHECK (weight BETWEEN 0 AND 10),
+    max_groups integer DEFAULT 3
+    -- unique(protocol, host, port)
 );
 
-create table classes(
-	class_id integer primary key autoincrement,
-	cluster_id integer not null,
-	name text not null,
-	description text,
-	foreign key (cluster_id) references clusters(cluster_id) on delete cascade
+CREATE TABLE classes(
+    class_id integer PRIMARY KEY autoincrement,
+    cluster_id integer NOT NULL,
+    name text NOT NULL,
+    description text,
+    FOREIGN KEY (cluster_id) REFERENCES clusters(cluster_id) ON DELETE CASCADE
 );
 
-create table groups(
-	group_id integer primary key autoincrement,
-	class_id integer not null,
-	name text not null,
-	foreign key (class_id) references classes(class_id) on delete cascade
+CREATE TABLE groups(
+    group_id integer PRIMARY KEY autoincrement,
+    class_id integer NOT NULL,
+    name text NOT NULL,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
 );
 
-create table users (
-	user_id integer primary key autoincrement,
-	username text not null unique,
-	full_name text,
-	group_id integer not null,
-	default_password text not null,
-	foreign key (group_id) references groups(group_id) on delete cascade
+CREATE TABLE users (
+    user_id integer PRIMARY KEY autoincrement,
+    username text NOT NULL UNIQUE,
+    full_name text,
+    group_id integer NOT NULL,
+    default_password text NOT NULL,
+    FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
 );
 
-create table group_assignments (
-	group_id integer not null,
-	node_id integer not null,
-	assigned_at timestamp default current_timestamp,
-	primary key (group_id),
-	foreign key (group_id) references groups(group_id) on delete cascade,
-	foreign key (node_id) references nodes(node_id) on delete cascade
+CREATE TABLE group_assignments (
+    group_id integer NOT NULL,
+    node_id integer NOT NULL,
+    assigned_at timestamp DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id),
+    FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE,
+    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
 );
 
-create table exercises (
-	exercise_id integer primary key autoincrement,
-	project_uuid text not null check (length(project_uuid) = 8),
-	group_id integer not null,
-	name text not null,
-	state text check (state in ('created','running','completed','deleted')) default 'created',
-	created_at timestamp default current_timestamp,
-	foreign key (group_id) references groups(group_id) on delete cascade
+CREATE TABLE exercises (
+    exercise_id integer PRIMARY KEY autoincrement,
+    project_uuid text NOT NULL CHECK (length(project_uuid) = 8),
+    group_id integer NOT NULL,
+    name text NOT NULL,
+    state text CHECK (
+        state IN ('created', 'running', 'completed', 'deleted')
+    ) DEFAULT 'created',
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES groups(group_id) ON DELETE CASCADE
 );

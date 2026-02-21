@@ -2,7 +2,6 @@ package uninstall
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
@@ -126,13 +125,12 @@ will be automatically loaded and command line flags will be ignored.`,
 				fmt.Println()
 			}
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			user := args[0]
 
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("%s Failed to get global options: %v\n", messageUtils.ErrorMsg("Failed to get global options"), err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			// Parse server URL for SSH connection
@@ -179,21 +177,19 @@ will be automatically loaded and command line flags will be ignored.`,
 
 			// Validate arguments
 			if err := ssl.ValidateInstallSSLInput(sslArgs); err != nil {
-				fmt.Printf("%s Validation error: %v\n", messageUtils.ErrorMsg("Validation error"), err)
-				return
+				return fmt.Errorf("validation error: %w", err)
 			}
 
 			// Show uninstall header
 			fmt.Printf("%s %s\n", messageUtils.Bold("🗑️"), messageUtils.Bold("GNS3 SSL Uninstallation"))
-			fmt.Printf("%s\n", messageUtils.Seperator(strings.Repeat("─", 50)))
+			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
 			// Step 1: Connect via SSH
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, user, sshPort, privateKeyPath, verbose)
 			if err != nil {
-				fmt.Printf("%s Failed to connect via SSH: %v\n", messageUtils.ErrorMsg("Failed to connect via SSH"), err)
-				return
+				return fmt.Errorf("failed to connect via SSH: %w", err)
 			}
 			defer func() {
 				if sshClient != nil {
@@ -205,8 +201,7 @@ will be automatically loaded and command line flags will be ignored.`,
 			// Step 2: Check privileges
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
 			if err := sshClient.CheckPrivileges(); err != nil {
-				fmt.Printf("%s Privilege check failed: %v\n", messageUtils.ErrorMsg("Privilege check failed"), err)
-				return
+				return fmt.Errorf("privilege check failed: %w", err)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
@@ -220,13 +215,11 @@ will be automatically loaded and command line flags will be ignored.`,
 			fmt.Printf("%s Uninstalling Caddy reverse proxy...\n", messageUtils.InfoMsg("Uninstalling Caddy reverse proxy"))
 			success, err := sshClient.ExecuteScript(editedScript, "/tmp/gns3_ssl_uninstall.sh")
 			if err != nil {
-				fmt.Printf("%s Failed to execute uninstall script: %v\n", messageUtils.ErrorMsg("Failed to execute uninstall script"), err)
-				return
+				return fmt.Errorf("failed to execute uninstall script: %w", err)
 			}
 
 			if !success {
-				fmt.Printf("%s Uninstall script failed\n", messageUtils.ErrorMsg("Uninstall script failed"))
-				return
+				return fmt.Errorf("uninstall script failed")
 			}
 			fmt.Printf("%s Uninstall completed\n", messageUtils.SuccessMsg("Uninstall completed"))
 
@@ -242,6 +235,7 @@ will be automatically loaded and command line flags will be ignored.`,
 			// Show success message
 			fmt.Printf("\n%s Successfully uninstalled Caddy reverse proxy\n", messageUtils.SuccessMsg("Successfully uninstalled Caddy reverse proxy"))
 			fmt.Printf("%s GNS3 server is now accessible on port %d\n", messageUtils.InfoMsg("GNS3 server is now accessible"), sslArgs.GNS3Port)
+			return nil
 		},
 	}
 
@@ -295,18 +289,18 @@ Use --preserve-data to keep the GNS3 home directory with projects and user data.
 Note: This will NOT remove virtualization packages (QEMU, Docker, VirtualBox, etc.)
 as they may be used by other applications.`,
 		Args: cobra.ExactArgs(1),
-		PreRun: func(cmd *cobra.Command, args []string) {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
 			// Handle interactive mode
 			if interactive {
 				editedText, err := utils.EditTextWithEditor(gns3.UninstallInteractiveOptionsText, "txt")
 				if err != nil {
-					log.Fatalf("failed to edit options: %v", err)
+					return fmt.Errorf("failed to edit options: %w", err)
 				}
 
 				// Parse the edited options
 				interactiveArgs, err := gns3.ParseInteractiveOptions(editedText)
 				if err != nil {
-					log.Fatalf("failed to parse interactive options: %v", err)
+					return fmt.Errorf("failed to parse interactive options: %w", err)
 				}
 
 				// Override the flag values with interactive values
@@ -315,14 +309,14 @@ as they may be used by other applications.`,
 				verbose = interactiveArgs.Verbose
 				preserveData = interactiveArgs.PreserveData
 			}
+			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			user := args[0]
 
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("%s Failed to get global options: %v\n", messageUtils.ErrorMsg("Failed to get global options"), err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			// Parse server URL for SSH connection
@@ -365,21 +359,19 @@ as they may be used by other applications.`,
 
 			// Validate arguments
 			if err := gns3.ValidateUninstallGNS3Input(gns3Args); err != nil {
-				fmt.Printf("%s Validation error: %v\n", messageUtils.ErrorMsg("Validation error"), err)
-				return
+				return fmt.Errorf("validation error: %w", err)
 			}
 
 			// Show uninstall header
 			fmt.Printf("%s %s\n", messageUtils.Bold("🗑️"), messageUtils.Bold("GNS3 Server Uninstallation"))
-			fmt.Printf("%s\n", messageUtils.Seperator(strings.Repeat("─", 50)))
+			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
 			// Step 1: Connect via SSH
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, user, sshPort, privateKeyPath, verbose)
 			if err != nil {
-				fmt.Printf("%s Failed to connect via SSH: %v\n", messageUtils.ErrorMsg("Failed to connect via SSH"), err)
-				return
+				return fmt.Errorf("failed to connect via SSH: %w", err)
 			}
 			defer func() {
 				if sshClient != nil {
@@ -391,8 +383,7 @@ as they may be used by other applications.`,
 			// Step 2: Check privileges
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
 			if err := sshClient.CheckPrivileges(); err != nil {
-				fmt.Printf("%s Privilege check failed: %v\n", messageUtils.ErrorMsg("Privilege check failed"), err)
-				return
+				return fmt.Errorf("privilege check failed: %w", err)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
@@ -406,13 +397,11 @@ as they may be used by other applications.`,
 			fmt.Printf("%s Uninstalling GNS3 server...\n", messageUtils.InfoMsg("Uninstalling GNS3 server"))
 			success, err := sshClient.ExecuteScript(editedScript, "/tmp/gns3_uninstall.sh")
 			if err != nil {
-				fmt.Printf("%s Failed to execute uninstall script: %v\n", messageUtils.ErrorMsg("Failed to execute uninstall script"), err)
-				return
+				return fmt.Errorf("failed to execute uninstall script: %w", err)
 			}
 
 			if !success {
-				fmt.Printf("%s Uninstall script failed\n", messageUtils.ErrorMsg("Uninstall script failed"))
-				return
+				return fmt.Errorf("uninstall script failed")
 			}
 			fmt.Printf("%s Uninstall completed\n", messageUtils.SuccessMsg("Uninstall completed"))
 
@@ -428,6 +417,7 @@ as they may be used by other applications.`,
 			// Show success message
 			fmt.Printf("\n%s GNS3 uninstallation completed successfully\n", messageUtils.SuccessMsg("GNS3 uninstallation completed successfully"))
 			fmt.Printf("%s If GNS3 was installed, it has been removed. If not found, no action was needed.\n", messageUtils.InfoMsg("If GNS3 was installed, it has been removed. If not found, no action was needed."))
+			return nil
 		},
 	}
 

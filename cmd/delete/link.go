@@ -15,30 +15,28 @@ func NewDeleteLinkCmd() *cobra.Command {
 		Long:    `Delete a link from a project on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 link delete my-project my-link",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			linkID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(linkID) {
-				fmt.Println("Link ID must be a valid UUID")
-				return
+				return fmt.Errorf("link ID must be a valid UUID")
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteLink", []string{projectID, linkID})
+			return nil
 		},
 	}
 

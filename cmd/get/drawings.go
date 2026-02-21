@@ -12,7 +12,7 @@ import (
 func NewGetDrawingsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName + " [project-name/id]",
 		Short:   "Get the drawings within a project by name or id",
 		Long:    `Get the drawings within a project by name or id`,
@@ -35,23 +35,21 @@ func NewGetDrawingsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				projectDrawings, err := utils.GetResourceWithContext(cfg, "getDrawings", ids, "project", "Project:")
 				if err != nil {
-					fmt.Printf("Error getting drawings: %v\n", err)
-					return
+					return fmt.Errorf("error getting drawings: %w", err)
 				}
 
 				utils.PrintResourceWithContext(projectDrawings, "Project:")
@@ -60,12 +58,12 @@ func NewGetDrawingsCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getDrawings", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project")
@@ -74,15 +72,15 @@ func NewGetDrawingsCmd() *cobra.Command {
 }
 
 func NewGetDrawingCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [project-name/id] [drawing-name/id]",
 		Short:   "Get a drawing within a project by name or id",
 		Long:    `Get a drawing within a project by name or id`,
 		Example: "gns3util -s https://controller:3080 drawing info my-project my-drawing",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			projectID := args[0]
@@ -90,12 +88,11 @@ func NewGetDrawingCmd() *cobra.Command {
 			if !utils.IsValidUUIDv4(args[0]) {
 				projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 			utils.ExecuteAndPrint(cfg, "getDrawing", []string{projectID, linkID})
-
+			return nil
 		},
 	}
 	return cmd

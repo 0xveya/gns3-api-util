@@ -5,9 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	xhkdf "golang.org/x/crypto/hkdf"
 	"io"
 	"strings"
+
+	xhkdf "golang.org/x/crypto/hkdf"
 )
 
 func NewNonce() ([]byte, error) {

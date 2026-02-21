@@ -15,69 +15,70 @@ import (
 )
 
 func NewGetProjectsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get the projects of the GNS3 Server",
 		Long:    `Get the projects of the GNS3 Server`,
 		Example: "gns3util -s https://controller:3080 project ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getProjects", nil)
+			return nil
 		},
 	}
 	return cmd
 }
 
 func NewGetProjectCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "info [project-name/id]",
 		Short:   "Get a project by id or name",
 		Long:    `Get a project by id or name`,
 		Example: "gns3util -s https://controller:3080 project info my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 			utils.ExecuteAndPrint(cfg, "getProject", []string{id})
+			return nil
 		},
 	}
 	return cmd
 }
 
 func NewGetProjectStatsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "stats [project-name/id]",
 		Short:   "Get project-stats by id or name",
 		Long:    `Get project-stats by id or name`,
 		Example: "gns3util -s https://controller:3080 project stats my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 			utils.ExecuteAndPrint(cfg, "getProjectStats", []string{id})
+			return nil
 		},
 	}
 	return cmd
@@ -86,26 +87,26 @@ func NewGetProjectStatsCmd() *cobra.Command {
 func NewGetProjectLockedCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "locked [project-name/id]",
 		Short:   "Get if a project is locked by id or name",
 		Long:    `Get if a project is locked by id or name`,
 		Example: "gns3util -s https://controller:3080 project locked my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 			utils.ExecuteAndPrint(cfg, "getProjectLocked", []string{id})
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project")
@@ -124,25 +125,23 @@ func NewGetProjectExportCmd() *cobra.Command {
 		outputFile        string
 	)
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "export [project-name/id]",
 		Short:   "Export a project from GNS3",
 		Long:    `Export a project from GNS3 with specified options`,
 		Example: "gns3util -s https://controller:3080 project export my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
@@ -150,8 +149,7 @@ func NewGetProjectExportCmd() *cobra.Command {
 			if utils.IsValidUUIDv4(args[0]) {
 				projectName, err = getProjectNameFromID(cfg, id)
 				if err != nil {
-					fmt.Printf("failed to get project name: %v", err)
-					return
+					return fmt.Errorf("failed to get project name: %w", err)
 				}
 			}
 
@@ -161,8 +159,7 @@ func NewGetProjectExportCmd() *cobra.Command {
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -178,27 +175,26 @@ func NewGetProjectExportCmd() *cobra.Command {
 
 			exportData, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to export project: %v", err)
-				return
+				return fmt.Errorf("failed to export project: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode != 200 {
-				fmt.Printf("export failed with status %d: %s", resp.StatusCode, string(exportData))
-				return
+				return fmt.Errorf("export failed with status %d: %s", resp.StatusCode, string(exportData))
 			}
 
-			err = os.WriteFile(outputFile, exportData, 0644)
+			err = os.WriteFile(outputFile, exportData, 0o644)
 			if err != nil {
-				fmt.Printf("failed to save export file: %v", err)
-				return
+				return fmt.Errorf("failed to save export file: %w", err)
 			}
 
 			fmt.Printf("%s Project exported successfully to %s", messageUtils.SuccessMsg("Project exported successfully"), messageUtils.Bold(outputFile))
+			return nil
 		},
 	}
 
@@ -236,7 +232,8 @@ func getProjectNameFromID(cfg config.GlobalOptions, projectID string) (string, e
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v", err)
+			// Keep silent on body close errors
+			_ = err
 		}
 	}()
 
@@ -259,26 +256,24 @@ func getProjectNameFromID(cfg config.GlobalOptions, projectID string) (string, e
 func NewGetProjectFileCmd() *cobra.Command {
 	var outputFile string
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "file [project-name/id] [file-path]",
 		Short:   "Get a file from a project",
 		Long:    `Get a file from a project by project ID/name and file path`,
 		Example: "gns3util -s https://controller:3080 project file my-project /path/to/file",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			filePath := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(args[0]) {
 				projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
@@ -288,8 +283,7 @@ func NewGetProjectFileCmd() *cobra.Command {
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -305,27 +299,26 @@ func NewGetProjectFileCmd() *cobra.Command {
 
 			fileData, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to get project file: %v", err)
-				return
+				return fmt.Errorf("failed to get project file: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode != 200 {
-				fmt.Printf("failed to get project file with status %d: %s", resp.StatusCode, string(fileData))
-				return
+				return fmt.Errorf("failed to get project file with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0644)
+			err = os.WriteFile(outputFile, fileData, 0o644)
 			if err != nil {
-				fmt.Printf("failed to save project file: %v", err)
-				return
+				return fmt.Errorf("failed to save project file: %w", err)
 			}
 
 			fmt.Printf("%s Project file downloaded successfully to %s", messageUtils.SuccessMsg("Project file downloaded successfully"), messageUtils.Bold(outputFile))
+			return nil
 		},
 	}
 
@@ -337,35 +330,32 @@ func NewGetProjectFileCmd() *cobra.Command {
 func NewGetNodeFileCmd() *cobra.Command {
 	var outputFile string
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "node-file [project-name/id] [node-name/id] [file-path]",
 		Short:   "Get a file from a node",
 		Long:    `Get a file from a node by project ID/name, node ID/name, and file path`,
 		Example: "gns3util -s https://controller:3080 project node-file my-project my-node /path/to/file",
 		Args:    cobra.ExactArgs(3),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			nodeID := args[1]
 			filePath := args[2]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(args[0]) {
 				projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
 			if !utils.IsValidUUIDv4(args[1]) {
 				nodeID, err = utils.ResolveID(cfg, "node", args[1], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
@@ -375,8 +365,7 @@ func NewGetNodeFileCmd() *cobra.Command {
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -392,27 +381,26 @@ func NewGetNodeFileCmd() *cobra.Command {
 
 			fileData, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to get node file: %v", err)
-				return
+				return fmt.Errorf("failed to get node file: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode != 200 {
-				fmt.Printf("failed to get node file with status %d: %s", resp.StatusCode, string(fileData))
-				return
+				return fmt.Errorf("failed to get node file with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0644)
+			err = os.WriteFile(outputFile, fileData, 0o644)
 			if err != nil {
-				fmt.Printf("failed to save node file: %v", err)
-				return
+				return fmt.Errorf("failed to save node file: %w", err)
 			}
 
 			fmt.Printf("%s Node file downloaded successfully to %s", messageUtils.SuccessMsg("Node file downloaded successfully"), messageUtils.Bold(outputFile))
+			return nil
 		},
 	}
 
@@ -424,34 +412,31 @@ func NewGetNodeFileCmd() *cobra.Command {
 func NewStreamPcapCmd() *cobra.Command {
 	var outputFile string
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "stream-pcap [project-name/id] [link-name/id]",
 		Short:   "Stream PCAP capture file from compute",
 		Long:    `Stream the PCAP capture file from compute by project ID/name and link ID/name`,
 		Example: "gns3util -s https://controller:3080 project stream-pcap my-project my-link",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			linkID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(args[0]) {
 				projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
 			if !utils.IsValidUUIDv4(args[1]) {
 				linkID, err = utils.ResolveID(cfg, "link", args[1], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
@@ -461,8 +446,7 @@ func NewStreamPcapCmd() *cobra.Command {
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -478,27 +462,26 @@ func NewStreamPcapCmd() *cobra.Command {
 
 			fileData, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to stream PCAP: %v", err)
-				return
+				return fmt.Errorf("failed to stream PCAP: %w", err)
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
 			if resp.StatusCode != 200 {
-				fmt.Printf("failed to stream PCAP with status %d: %s", resp.StatusCode, string(fileData))
-				return
+				return fmt.Errorf("failed to stream PCAP with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0644)
+			err = os.WriteFile(outputFile, fileData, 0o644)
 			if err != nil {
-				fmt.Printf("failed to save PCAP file: %v", err)
-				return
+				return fmt.Errorf("failed to save PCAP file: %w", err)
 			}
 
 			fmt.Printf("%s PCAP file streamed successfully to %s", messageUtils.SuccessMsg("PCAP file streamed successfully"), messageUtils.Bold(outputFile))
+			return nil
 		},
 	}
 

@@ -2,6 +2,8 @@ package exercise
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +22,7 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/api/schemas"
 	"github.com/stefanistkuhl/gns3util/pkg/authentication"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/fuzzy"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
@@ -26,7 +30,7 @@ import (
 )
 
 func NewExerciseCreateCmd() *cobra.Command {
-	var createExerciseCmd = &cobra.Command{
+	createExerciseCmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create an exercise (project) for every group in a class with ACLs",
 		Long: `Create an exercise (project) for every group in a class with ACLs to lock down access.
@@ -70,15 +74,12 @@ This command will:
 }
 
 func selectAndReplicateTemplateAcrossCluster(cfg config.GlobalOptions, clusterID int) (map[string]string, error) {
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return nil, fmt.Errorf("init db: %w", err)
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
 
-	nodes, err := db.GetNodes(conn)
+	nodes, err := store.GetNodes(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("get nodes: %w", err)
 	}
@@ -87,7 +88,7 @@ func selectAndReplicateTemplateAcrossCluster(cfg config.GlobalOptions, clusterID
 	nameSet := make(map[string]struct{})
 
 	for _, node := range nodes {
-		if node.ClusterID != clusterID {
+		if int(node.ClusterID) != clusterID {
 			continue
 		}
 
@@ -241,16 +242,15 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		exerciseName = args[0]
 	}
 
+	ctx := context.Background()
+
 	if clusterName != "" {
-		conn, err := db.InitIfNeeded()
+		store, err := db.Init()
 		if err != nil {
 			return fmt.Errorf("failed to init db: %w", err)
 		}
-		defer func() {
-			_ = conn.Close()
-		}()
 
-		clusters, err := db.GetClusters(conn)
+		clusters, err := store.GetClusters(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get clusters: %w", err)
 		}
@@ -258,7 +258,7 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		clusterID := 0
 		for _, c := range clusters {
 			if strings.EqualFold(strings.TrimSpace(c.Name), strings.TrimSpace(clusterName)) {
-				clusterID = c.Id
+				clusterID = int(c.ClusterID)
 				break
 			}
 		}
@@ -266,7 +266,7 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("cluster not found: %s", clusterName)
 		}
 
-		classesInDb, getClassesErr := db.GetClassesFromDB(conn, clusterID)
+		classesInDb, getClassesErr := store.GetClasses(ctx, int64(clusterID))
 		if getClassesErr != nil {
 			return fmt.Errorf("failed to get classes from db: %w", getClassesErr)
 		}
@@ -285,9 +285,50 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("class %s not found in database for cluster %d", className, clusterID)
 		}
 
-		plans, err := db.GetNodeGroupNamesForClass(conn, clusterID, className)
+		data, err := store.GetNodeGroupNamesForClass(ctx, sqlc.GetNodeGroupNamesForClassParams{ClusterID: int64(clusterID), Name: className})
 		if err != nil {
 			return fmt.Errorf("failed to get node groups: %w", err)
+		}
+
+		var plans []db.NodeGroupsForClass
+		nodeMap := make(map[string]*db.NodeGroupsForClass)
+		groupMap := make(map[string]*db.GroupData)
+
+		for _, dat := range data {
+			url := fmt.Sprintf("%v", dat.NodeUrl)
+
+			node, ok := nodeMap[url]
+			if !ok {
+				plans = append(plans, db.NodeGroupsForClass{
+					NodeURL: url,
+					Groups:  []db.GroupData{},
+				})
+				node = &plans[len(plans)-1]
+				nodeMap[url] = node
+			}
+
+			groupKey := url + dat.GroupName
+			group, ok := groupMap[groupKey]
+			if !ok {
+				node.Groups = append(node.Groups, db.GroupData{
+					Name:     dat.GroupName,
+					Students: []db.UserData{},
+				})
+				group = &node.Groups[len(node.Groups)-1]
+				groupMap[groupKey] = group
+			}
+
+			fullName := ""
+			if dat.FullName.Valid {
+				fullName = dat.FullName.String
+			}
+
+			group.Students = append(group.Students, db.UserData{
+				Username:  dat.Username,
+				FullName:  fullName,
+				Password:  dat.DefaultPassword,
+				GroupName: dat.GroupName,
+			})
 		}
 
 		var templateIDByNode map[string]string
@@ -437,12 +478,26 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 		fmt.Printf("%v Skipping groups that already have exercises\n", messageUtils.InfoMsg("Skipping groups that already have exercises"))
 	}
 
-	conn, _ := db.InitIfNeeded()
+	store, err := db.Init()
+	if err != nil {
+		return templateProjectID, 0, fmt.Errorf("failed to init db: %w", err)
+	}
+	ctx := context.Background()
+	tx, err := store.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return templateProjectID, 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
 	defer func() {
-		if conn != nil {
-			_ = conn.Close()
+		if err != nil {
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				fmt.Printf("failed to rollback transaction: %v", rollbackErr)
+			}
 		}
+		_ = tx.Commit()
 	}()
+
+	qtx := store.WithTx(tx)
 
 	successCount := 0
 	for _, group := range classGroups {
@@ -541,23 +596,38 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 			continue
 		}
 
-		if conn != nil {
-			if nodes, nerr := db.GetNodes(conn); nerr == nil {
+		if store != nil {
+			if nodes, nerr := qtx.GetNodes(ctx); nerr == nil {
 				var clusterID int
 				for _, n := range nodes {
 					url := fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
 					if url == cfg.Server {
-						clusterID = n.ClusterID
+						clusterID = int(n.ClusterID)
 						break
 					}
 				}
 				if clusterID != 0 {
-					_ = db.InsertExerciseRecord(conn, projectID, groupName, exerciseName, "created")
+					groupIDint, convertErr := strconv.Atoi(groupName)
+					if convertErr != nil {
+						return templateProjectID, 0, fmt.Errorf("failed to convert group name to int: %w", convertErr)
+					}
+					insertErr := qtx.InsertExerciseRecord(ctx, sqlc.InsertExerciseRecordParams{ProjectUuid: projectID, GroupID: int64(groupIDint), Name: exerciseName, State: sql.NullString{String: "created", Valid: true}})
+					if insertErr != nil {
+						rollbackErr := tx.Rollback()
+						if rollbackErr != nil {
+							fmt.Printf("failed to rollback transaction: %v", rollbackErr)
+						}
+						return templateProjectID, 0, fmt.Errorf("failed to insert exercise record: %w", insertErr)
+					}
 				}
 			}
 		}
 
 		successCount++
+		commitErr := tx.Commit()
+		if commitErr != nil {
+			return templateProjectID, 0, fmt.Errorf("failed to commit transaction: %w", commitErr)
+		}
 		fmt.Printf("%v Created project %s for group %s on %s\n",
 			messageUtils.SuccessMsg("Created project"),
 			messageUtils.Bold(projectName),

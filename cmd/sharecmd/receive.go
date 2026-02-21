@@ -88,7 +88,7 @@ func NewReceiveCmd() *cobra.Command {
 					fmt.Printf("%s %v\n", colorUtils.Warning("mDNS advertise failed:"), err)
 				} else {
 					defer stopAdv()
-					fmt.Printf("%s %s %s\n", colorUtils.Success("Advertised via mDNS as"), colorUtils.Bold(keys.DeviceLabel()), colorUtils.Seperator("(_gns3util-share._udp)"))
+					fmt.Printf("%s %s %s\n", colorUtils.Success("Advertised via mDNS as"), colorUtils.Bold(keys.DeviceLabel()), colorUtils.Separator("(_gns3util-share._udp)"))
 				}
 			}
 

@@ -29,24 +29,23 @@ func NewDuplicateTemplateCmd() *cobra.Command {
 		Long:    `Duplicate a template on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 template duplicate my-template",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			templateID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(templateID) {
 				id, err := utils.ResolveID(cfg, "template", templateID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				templateID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "duplicateTemplate", []string{templateID})
+			return nil
 		},
 	}
 

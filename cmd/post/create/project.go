@@ -33,7 +33,7 @@ func NewCreateProjectCmd() *cobra.Command {
 		useJSON             string
 	)
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "new",
 		Short:   "Create a Project",
 		Long:    "Create a new project on the controller.",

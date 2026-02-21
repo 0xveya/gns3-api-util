@@ -5,12 +5,13 @@ import (
 )
 
 func NewGetCmdGroup() *cobra.Command {
-	var getCmd = &cobra.Command{
+	getCmd := &cobra.Command{
 		Use:   "get",
 		Short: "Get GNS3 resources (e.g., projects, users)",
 		Long:  `Provides commands to retrieve various resources from a GNS3v3 server.`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
+			return nil
 		},
 	}
 

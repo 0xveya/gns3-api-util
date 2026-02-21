@@ -16,20 +16,15 @@ func NewTemplateCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 templates.`,
 	}
 
-	// Create subcommands
 	templateCmd.AddCommand(create.NewCreateTemplateCmd())
 
-	// Get subcommands
 	templateCmd.AddCommand(get.NewGetTemplatesCmd())
 	templateCmd.AddCommand(get.NewGetTemplateCmd())
 
-	// Post subcommands
 	templateCmd.AddCommand(post.NewDuplicateTemplateCmd())
 
-	// Update subcommands
 	templateCmd.AddCommand(update.NewUpdateTemplateCmd())
 
-	// Delete subcommands
 	templateCmd.AddCommand(delete.NewDeleteTemplateCmd())
 
 	return templateCmd

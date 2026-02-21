@@ -15,17 +15,13 @@ func NewImageCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 images.`,
 	}
 
-	// Create subcommands
 	imageCmd.AddCommand(create.NewCreateQemuImageCmd())
 
-	// Get subcommands
 	imageCmd.AddCommand(get.NewGetImagesCmd())
 	imageCmd.AddCommand(get.NewGetImageCmd())
 
-	// Post subcommands
 	imageCmd.AddCommand(post.NewImageCmdGroup())
 
-	// Delete subcommands
 	imageCmd.AddCommand(delete.NewDeleteImageCmd())
 	imageCmd.AddCommand(delete.NewDeletePruneImagesCmd())
 

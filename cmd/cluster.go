@@ -11,15 +11,15 @@ func NewClusterCmdGroup() *cobra.Command {
 		Short: "cluster operations",
 		Long:  `Create and organize your GNS3 servers inside of a cluster`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
 			if err := validateGlobalFlags(); err != nil {
 				return err
 			}
 
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
+			return nil
 		},
 	}
 	clusterCmd.AddCommand(clustercmd.NewCreateClusterCmd())

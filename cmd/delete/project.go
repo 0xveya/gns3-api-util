@@ -15,24 +15,23 @@ func NewDeleteProjectCmd() *cobra.Command {
 		Long:    `Delete a project from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 project delete my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteProject", []string{projectID})
+			return nil
 		},
 	}
 

@@ -10,17 +10,18 @@ import (
 )
 
 func NewGetTemplatesCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get all templates of the Server",
 		Long:    `Get all templates of the Server`,
 		Example: "gns3util -s https://controller:3080 template ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getTemplates", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -29,7 +30,7 @@ func NewGetTemplatesCmd() *cobra.Command {
 func NewGetTemplateCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [template-name/id]",
 		Short:   "Get a template by id or name",
 		Long:    `Get a template by id or name`,
@@ -52,29 +53,28 @@ func NewGetTemplateCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getTemplates", "template_id", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "template", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getTemplate", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a template")

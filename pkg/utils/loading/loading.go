@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
@@ -117,7 +117,7 @@ func (m LoadingModel) renderLoading() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("🔧 GNS3 SSL Installation\n"))
-	sb.WriteString(messageUtils.Seperator(strings.Repeat("─", 50)) + "\n\n")
+	sb.WriteString(messageUtils.Separator(strings.Repeat("─", 50)) + "\n\n")
 
 	spinner := spinnerStyle.Render(string(spinnerChars[m.spinner]))
 	sb.WriteString(fmt.Sprintf("%s %s\n\n", spinner, m.message))
@@ -138,7 +138,7 @@ func (m LoadingModel) renderLoading() string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(messageUtils.Seperator("Press Ctrl+C to cancel"))
+	sb.WriteString(messageUtils.Separator("Press Ctrl+C to cancel"))
 
 	return sb.String()
 }
@@ -147,7 +147,7 @@ func (m LoadingModel) renderSuccess() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("🎉 GNS3 SSL Installation Complete!\n"))
-	sb.WriteString(messageUtils.Seperator(strings.Repeat("─", 50)) + "\n\n")
+	sb.WriteString(messageUtils.Separator(strings.Repeat("─", 50)) + "\n\n")
 
 	sb.WriteString(successStyle.Render("✓ ") + "All steps completed successfully\n\n")
 
@@ -168,7 +168,7 @@ func (m LoadingModel) renderError() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("❌ GNS3 SSL Installation Failed\n"))
-	sb.WriteString(messageUtils.Seperator(strings.Repeat("─", 50)) + "\n\n")
+	sb.WriteString(messageUtils.Separator(strings.Repeat("─", 50)) + "\n\n")
 
 	sb.WriteString(errorStyle.Render("✗ ") + "Installation failed\n\n")
 

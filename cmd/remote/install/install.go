@@ -2,7 +2,6 @@ package install
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -15,12 +14,13 @@ import (
 )
 
 func NewInstallCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install something on the remote server via SSH",
 		Long:  `Install something on the remote server via SSH`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
+			return nil
 		},
 	}
 	cmd.AddCommand(NewInstallHttpsCmd())
@@ -43,23 +43,23 @@ func NewInstallHttpsCmd() *cobra.Command {
 		verbose          bool
 	)
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "https [user]",
 		Short: "Install a reverse proxy for HTTPS",
 		Long:  `Install caddy for HTTPS and optionally set firewall rules`,
 		Args:  cobra.ExactArgs(1),
-		PreRun: func(cmd *cobra.Command, args []string) {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
 			// Handle interactive mode
 			if interactive {
 				editedText, err := utils.EditTextWithEditor(ssl.InteractiveOptionsText, "txt")
 				if err != nil {
-					log.Fatalf("failed to edit options: %v", err)
+					return fmt.Errorf("failed to edit options: %w", err)
 				}
 
 				// Parse the edited options
 				interactiveArgs, err := ssl.ParseInteractiveOptions(editedText)
 				if err != nil {
-					log.Fatalf("failed to parse interactive options: %v", err)
+					return fmt.Errorf("failed to parse interactive options: %w", err)
 				}
 
 				// Override the flag values with interactive values
@@ -71,13 +71,14 @@ func NewInstallHttpsCmd() *cobra.Command {
 				firewallBlock = interactiveArgs.FirewallBlock
 				verbose = interactiveArgs.Verbose
 			}
+			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			user = args[0]
 
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				log.Fatalf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			sslArgs := ssl.InstallSSLArgs{
@@ -91,20 +92,19 @@ func NewInstallHttpsCmd() *cobra.Command {
 			}
 
 			if err := ssl.ValidateInstallSSLInput(sslArgs); err != nil {
-				log.Fatalf("validation error: %v", err)
+				return fmt.Errorf("validation error: %w", err)
 			}
 
 			hostname, sshPort := ssl.ParseServerURLForSSH(cfg.Server, port)
 
 			fmt.Printf("%s %s\n", messageUtils.Bold("🔧"), messageUtils.Bold("GNS3 SSL Installation"))
-			fmt.Printf("%s\n", messageUtils.Seperator(strings.Repeat("─", 50)))
+			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, user, sshPort, privateKeyPath, verbose)
 			if err != nil {
-				fmt.Printf("%s Failed to connect via SSH: %v\n", messageUtils.ErrorMsg("Failed to connect via SSH"), err)
-				return
+				return fmt.Errorf("failed to connect via SSH: %w", err)
 			}
 			defer func() {
 				_ = sshClient.Close()
@@ -113,8 +113,7 @@ func NewInstallHttpsCmd() *cobra.Command {
 
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
 			if err := sshClient.CheckPrivileges(); err != nil {
-				fmt.Printf("%s Privilege check failed: %v\n", messageUtils.ErrorMsg("Privilege check failed"), err)
-				return
+				return fmt.Errorf("privilege check failed: %w", err)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
@@ -126,8 +125,7 @@ func NewInstallHttpsCmd() *cobra.Command {
 			fmt.Printf("%s Installing Caddy reverse proxy...\n", messageUtils.InfoMsg("Installing Caddy reverse proxy"))
 			success, err := sshClient.ExecuteScript(modifiedScript, "/tmp/setup_https.sh")
 			if err != nil {
-				fmt.Printf("%s Failed to execute SSL installation script: %v\n", messageUtils.ErrorMsg("Failed to execute SSL installation script"), err)
-				return
+				return fmt.Errorf("failed to execute SSL installation script: %w", err)
 			}
 
 			if success {
@@ -164,9 +162,9 @@ func NewInstallHttpsCmd() *cobra.Command {
 				}
 				fmt.Printf("%s GNS3 server is now accessible via HTTPS on port %d\n", messageUtils.InfoMsg("GNS3 server accessible via HTTPS"), reverseProxyPort)
 			} else {
-				fmt.Printf("%s SSL installation script failed\n", messageUtils.ErrorMsg("SSL installation script failed"))
-				return
+				return fmt.Errorf("SSL installation script failed")
 			}
+			return nil
 		},
 	}
 

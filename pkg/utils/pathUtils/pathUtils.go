@@ -3,10 +3,11 @@ package pathUtils
 import (
 	"encoding/json"
 	"fmt"
-	homedir "github.com/mitchellh/go-homedir"
 	"io"
 	"os"
 	"path/filepath"
+
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 type GNS3Key struct {

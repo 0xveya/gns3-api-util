@@ -14,17 +14,14 @@ func NewSystemCmdGroup() *cobra.Command {
 		Long:  `Manage GNS3 system operations and settings.`,
 	}
 
-	// Get subcommands
 	systemCmd.AddCommand(get.NewGetVersionCmd())
 	systemCmd.AddCommand(get.NewGetStatisticsCmd())
 	systemCmd.AddCommand(get.NewGetNotificationsCmd())
 	systemCmd.AddCommand(get.NewGetIouLicenseCmd())
 
-	// Post subcommands
 	systemCmd.AddCommand(post.NewCheckVersionCmd())
 	systemCmd.AddCommand(post.NewControllerCmdGroup())
 
-	// Update subcommands
 	systemCmd.AddCommand(update.NewUpdateIOULicenseCmd())
 
 	return systemCmd

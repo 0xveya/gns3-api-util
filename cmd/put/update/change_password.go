@@ -20,7 +20,7 @@ var (
 )
 
 func NewChangePasswordCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "change-password [user-name/id]",
 		Short: "Change a user's password",
 		Long:  `Change a user's password with interactive password input and validation`,
@@ -49,11 +49,10 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 				passwordFlag = viper.GetString("password")
 			}
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v\n", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			var userID string
@@ -62,14 +61,12 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 			if useFuzzy {
 				rawData, _, err := utils.CallClient(cfg, "getUsers", nil, nil)
 				if err != nil {
-					fmt.Printf("%s %v\n", messageUtils.ErrorMsg("Error"), err)
-					return
+					return fmt.Errorf("error getting users: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Printf("%s Expected array response, got %s\n", messageUtils.ErrorMsg("Error"), result.Type)
-					return
+					return fmt.Errorf("expected array response, got %s", result.Type)
 				}
 
 				var apiData []gjson.Result
@@ -84,14 +81,12 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 				})
 
 				if len(usernames) == 0 {
-					fmt.Println("No users found")
-					return
+					return fmt.Errorf("no users found")
 				}
 
 				selected := fuzzy.NewFuzzyFinder(usernames, false)
 				if len(selected) == 0 {
-					fmt.Println("No user selected")
-					return
+					return fmt.Errorf("no user selected")
 				}
 
 				for _, data := range apiData {
@@ -108,8 +103,7 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 				if !utils.IsValidUUIDv4(args[0]) {
 					userID, err = utils.ResolveID(cfg, "user", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 			}
@@ -118,16 +112,14 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 
 			if passwordFlag != "" {
 				if !utils.ValidatePassword(passwordFlag) {
-					fmt.Printf("%s Password must be at least 8 characters with at least 1 number and 1 lowercase letter\n", messageUtils.ErrorMsg("Error"))
-					return
+					return fmt.Errorf("password must be at least 8 characters with at least 1 number and 1 lowercase letter")
 				}
 				newPassword = passwordFlag
 			} else {
 				fmt.Printf("Changing password for user: %s\n", messageUtils.Bold(username))
 				newPassword, err = utils.GetPasswordFromInput()
 				if err != nil {
-					fmt.Printf("%s %v\n", messageUtils.ErrorMsg("Error"), err)
-					return
+					return fmt.Errorf("failed to get password: %w", err)
 				}
 			}
 
@@ -137,17 +129,16 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 
 			data, err := json.Marshal(userUpdate)
 			if err != nil {
-				fmt.Printf("%s Failed to marshal user update: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to marshal user update: %w", err)
 			}
 
 			var payload map[string]any
 			if err := json.Unmarshal(data, &payload); err != nil {
-				fmt.Printf("%s Failed to prepare payload: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to prepare payload: %w", err)
 			}
 
 			utils.ExecuteAndPrintWithBody(cfg, "updateUser", []string{userID}, payload)
+			return nil
 		},
 	}
 

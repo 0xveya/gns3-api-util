@@ -9,17 +9,18 @@ import (
 )
 
 func NewGetStatisticsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "statistics",
 		Short:   "Get the statistics of the GNS3 Server",
 		Long:    `Get the statistics of the GNS3 Server`,
 		Example: "gns3util -s https://controller:3080 get statistics",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
-			utils.ExecuteAndPrint(cfg, "getMe", nil)
+			utils.ExecuteAndPrint(cfg, "getStatistics", nil)
+			return nil
 		},
 	}
 	return cmd

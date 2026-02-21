@@ -190,7 +190,7 @@ func NewSendCmd() *cobra.Command {
 						fmt.Printf("%s %s %s\n", colorUtils.Success("Include"), colorUtils.Bold(rel), colorUtils.Highlight(fmt.Sprintf("(%d bytes)", st.Size())))
 						selected = append(selected, abs)
 					} else {
-						fmt.Printf("%s %s %s\n", colorUtils.Warning("Skip"), colorUtils.Bold(rel), colorUtils.Seperator(fmt.Sprintf("(not found at %s)", abs)))
+						fmt.Printf("%s %s %s\n", colorUtils.Warning("Skip"), colorUtils.Bold(rel), colorUtils.Separator(fmt.Sprintf("(not found at %s)", abs)))
 					}
 				}
 				if len(selected) == 0 {
@@ -237,7 +237,7 @@ func NewSendCmd() *cobra.Command {
 				for _, abs := range selected {
 					rel := filepath.Base(abs)
 					st, _ := os.Stat(abs)
-					fmt.Printf("  %s %s %s\n", colorUtils.Seperator("•"), colorUtils.Bold(rel), colorUtils.Highlight(fmt.Sprintf("(%d bytes)", st.Size())))
+					fmt.Printf("  %s %s %s\n", colorUtils.Separator("•"), colorUtils.Bold(rel), colorUtils.Highlight(fmt.Sprintf("(%d bytes)", st.Size())))
 				}
 			}
 

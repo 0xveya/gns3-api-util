@@ -126,7 +126,7 @@ func handleConn(ctx context.Context, c *quic.Conn, serverPriv ed25519.PrivateKey
 	}
 	fmt.Printf("%s (%d):\n", colorUtils.Info("Incoming files"), len(offer.Files))
 	for _, fm := range offer.Files {
-		fmt.Printf("  %s %s %s\n", colorUtils.Seperator("•"), colorUtils.Bold(fm.Rel), colorUtils.Highlight(fmt.Sprintf("(%d bytes)", fm.Size)))
+		fmt.Printf("  %s %s %s\n", colorUtils.Separator("•"), colorUtils.Bold(fm.Rel), colorUtils.Highlight(fmt.Sprintf("(%d bytes)", fm.Size)))
 	}
 
 	// 5) Destination directory: ~/.gns3

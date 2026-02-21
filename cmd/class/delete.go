@@ -1,6 +1,7 @@
 package class
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -16,7 +17,7 @@ import (
 )
 
 func NewClassDeleteCmd() *cobra.Command {
-	var deleteClassCmd = &cobra.Command{
+	deleteClassCmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete a class and its students",
 		Long: `Delete a class and all its associated groups and users. This command can:
@@ -203,24 +204,36 @@ func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className strin
 		}
 	}
 
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return fmt.Errorf("failed to init db: %w", err)
 	}
+	ctx := context.Background()
+	tx, err := store.DB.BeginTx(ctx, nil)
+	if err != nil {
+		err = fmt.Errorf("failed to begin transaction: %w", err)
+		fmt.Printf("%v\n", err)
+		return err
+	}
+	qtx := store.WithTx(tx)
 	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
+		if err != nil {
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				err = fmt.Errorf("failed to rollback transaction: %w", rollbackErr)
+				fmt.Printf("%v\n", err)
+			}
 		}
 	}()
 
-	clusters, err := db.GetClusters(conn)
+	clusters, err := qtx.GetClusters(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get clusters: %w", err)
 	}
 	clusterID := 0
 	for _, c := range clusters {
 		if c.Name == clusterName {
-			clusterID = c.Id
+			clusterID = int(c.ClusterID)
 			break
 		}
 	}
@@ -228,20 +241,30 @@ func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className strin
 		return fmt.Errorf("cluster not found: %s", clusterName)
 	}
 
-	nodes, err := db.GetNodes(conn)
+	nodes, err := qtx.GetNodes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get nodes: %w", err)
 	}
 
-	if err := db.DeleteClassFromDB(conn, clusterID, className); err != nil {
+	classes, err := qtx.GetClasses(ctx, int64(clusterID))
+	if err != nil {
+		return fmt.Errorf("failed to get classes: %w", err)
+	}
+	var classID int64
+	for _, c := range classes {
+		if c.Name == className {
+			classID = c.ClassID
+		}
+	}
+	if err := qtx.DeleteClass(ctx, classID); err != nil {
 		fmt.Printf("%v Warning: failed to delete class %v from database: %v\n",
-			messageUtils.WarningMsgf("Warning: failed to delete class %s from database", className),
+			fmt.Errorf("Warning: failed to delete class %s from database", className),
 			messageUtils.Bold(className),
 			err)
 	}
 
 	for _, n := range nodes {
-		if n.ClusterID != clusterID {
+		if n.ClusterID != int64(clusterID) {
 			continue
 		}
 		nodeCfg := cfg
@@ -261,6 +284,10 @@ func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className strin
 			fmt.Printf("%v Deleted class %v on %s\n",
 				messageUtils.SuccessMsg("Deleted class"), messageUtils.Bold(className), nodeCfg.Server)
 		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -282,17 +309,12 @@ func getAllClassNamesFromDB(cfg config.GlobalOptions) ([]string, error) {
 		return nil, err
 	}
 
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
 
-	classes, err := db.GetClassesFromDB(conn, clusterID)
+	classes, err := store.GetClasses(context.Background(), int64(clusterID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get classes from db: %w", err)
 	}
@@ -369,24 +391,19 @@ func getClusterIDForServer(cfg config.GlobalOptions) (int, error) {
 	urlObj := utils.ValidateUrlWithReturn(cfg.Server)
 	clusterName := fmt.Sprintf("%s%s", urlObj.Hostname(), "_single_node_cluster")
 
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return 0, fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
 
-	clusters, err := db.GetClusters(conn)
+	clusters, err := store.GetClusters(context.Background())
 	if err != nil {
 		return 0, fmt.Errorf("failed to get clusters: %w", err)
 	}
 
 	for _, cluster := range clusters {
 		if cluster.Name == clusterName {
-			return cluster.Id, nil
+			return int(cluster.ClusterID), nil
 		}
 	}
 
@@ -457,24 +474,36 @@ func confirmAction(message string) bool {
 }
 
 func getAllClassNamesFromDBForClusterName(clusterName string) ([]string, error) {
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init db: %w", err)
 	}
+	ctx := context.Background()
+	tx, err := store.DB.BeginTx(ctx, nil)
+	if err != nil {
+		err = fmt.Errorf("failed to begin transaction: %w", err)
+		fmt.Printf("%v\n", err)
+		return nil, err
+	}
+	qtx := store.WithTx(tx)
 	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
+		if err != nil {
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				err = fmt.Errorf("failed to rollback transaction: %w", rollbackErr)
+				fmt.Printf("%v\n", err)
+			}
 		}
 	}()
 
-	clusters, err := db.GetClusters(conn)
+	clusters, err := qtx.GetClusters(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get clusters: %w", err)
 	}
 	clusterID := 0
 	for _, c := range clusters {
 		if c.Name == clusterName {
-			clusterID = c.Id
+			clusterID = int(c.ClusterID)
 			break
 		}
 	}
@@ -482,7 +511,7 @@ func getAllClassNamesFromDBForClusterName(clusterName string) ([]string, error) 
 		return nil, fmt.Errorf("cluster not found: %s", clusterName)
 	}
 
-	classes, err := db.GetClassesFromDB(conn, clusterID)
+	classes, err := qtx.GetClasses(ctx, int64(clusterID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get classes from db: %w", err)
 	}

@@ -14,11 +14,13 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
-var username string
-var password string
+var (
+	username string
+	password string
+)
 
 func NewAuthLoginCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Log in as user",
 		Long:  `Log in as a user`,
@@ -35,20 +37,17 @@ func NewAuthLoginCmd() *cobra.Command {
 			if !cmd.Flags().Changed("password") {
 				password = viper.GetString("password")
 			}
-
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v\n", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if username == "" || password == "" {
 				interactiveUsername, interactivePassword, err := utils.GetLoginCredentials()
 				if err != nil {
-					fmt.Printf("%s %v\n", messageUtils.ErrorMsg("Error"), err)
-					return
+					return err
 				}
 
 				if username == "" {
@@ -60,8 +59,7 @@ func NewAuthLoginCmd() *cobra.Command {
 			}
 
 			if username == "" || password == "" {
-				fmt.Printf("%s Username and password are required\n", messageUtils.ErrorMsg("Error"))
-				return
+				return fmt.Errorf("username and password are required")
 			}
 
 			credentials := schemas.Credentials{
@@ -71,23 +69,19 @@ func NewAuthLoginCmd() *cobra.Command {
 
 			data, err := json.Marshal(credentials)
 			if err != nil {
-				fmt.Printf("%s Failed to marshal credentials: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to marshal credentials: %w", err)
 			}
 
 			var payload map[string]any
 			if err := json.Unmarshal(data, &payload); err != nil {
-				fmt.Printf("%s Failed to prepare payload: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to prepare payload: %w", err)
 			}
 			body, status, err := utils.CallClient(cfg, "userAuthenticate", []string{}, payload)
 			if err != nil {
 				if strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "Authentication was unsuccessful") {
-					fmt.Printf("%v Authentication failed. Please check your username and password.\n", messageUtils.ErrorMsg("Error"))
-					return
+					return fmt.Errorf("authentication failed. Please check your username and password")
 				}
-				fmt.Printf("%v %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return err
 			}
 
 			if status == 200 {
@@ -95,18 +89,16 @@ func NewAuthLoginCmd() *cobra.Command {
 				var token schemas.Token
 				marshallErr := json.Unmarshal(body, &token)
 				if marshallErr != nil {
-					fmt.Printf("%v failed to unmarshall response: %s", messageUtils.ErrorMsg("Error"), marshallErr)
-					return
+					return fmt.Errorf("failed to unmarshall response: %w", marshallErr)
 				}
 				writeErr := authentication.SaveAuthData(cfg, token, credentials.Username)
 				if writeErr != nil {
-					fmt.Printf("%v failed to write authentication data to the keyfile: %s", messageUtils.ErrorMsg("Error"), writeErr)
-					return
+					return fmt.Errorf("failed to write authentication data to the keyfile: %w", writeErr)
 				}
 			} else {
-				fmt.Printf("%v Authentication failed (status: %d)\n", messageUtils.ErrorMsg("Error"), status)
+				return fmt.Errorf("authentication failed (status: %d)", status)
 			}
-
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&username, "user", "u", "", "User to log in as (env: GNS3_USER)")

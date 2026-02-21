@@ -5,7 +5,7 @@ import (
 )
 
 func NewClassCmdGroup() *cobra.Command {
-	var classCmd = &cobra.Command{
+	classCmd := &cobra.Command{
 		Use:   "class",
 		Short: "Class operations",
 		Long:  `Create, manage, and manipulate GNS3 classes.`,

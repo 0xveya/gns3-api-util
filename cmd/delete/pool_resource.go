@@ -15,30 +15,28 @@ func NewDeletePoolResourceCmd() *cobra.Command {
 		Long:    `Delete a resource from a pool on the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 pool resource my-pool resource-id",
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			poolID := args[0]
 			resourceID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(poolID) {
 				id, err := utils.ResolveID(cfg, "pool", poolID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				poolID = id
 			}
 
 			if !utils.IsValidUUIDv4(resourceID) {
-				fmt.Println("Resource ID must be a valid UUID")
-				return
+				return fmt.Errorf("resource ID must be a valid UUID")
 			}
 
 			utils.ExecuteAndPrint(cfg, "deletePoolResource", []string{poolID, resourceID})
+			return nil
 		},
 	}
 

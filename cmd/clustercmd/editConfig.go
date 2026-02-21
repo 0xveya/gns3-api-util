@@ -15,37 +15,30 @@ func NewEditConfigCmd() *cobra.Command {
 		Use:   "edit",
 		Short: "edit your configuration with your $EDITOR",
 		Long:  `edit your configuration with your $EDITOR`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfgLoaded, err := cluster.LoadClusterConfig()
 			if err != nil {
-				fmt.Printf("%s failed to load config: %v\n", messageUtils.ErrorMsg("Error"), err)
-				return
+				return fmt.Errorf("failed to load config: %w", err)
 			}
 			res, marshallErr := toml.Marshal(&cfgLoaded)
 			if marshallErr != nil {
-				fmt.Printf("%s failed to marshall config %s", messageUtils.ErrorMsg("Error"), marshallErr)
-				return
-
+				return fmt.Errorf("failed to marshal config: %w", marshallErr)
 			}
 			str, editErr := utils.EditTextWithEditor(string(res), "toml")
 			if editErr != nil {
-				fmt.Printf("%s failed to edit config %s", messageUtils.ErrorMsg("Error"), editErr)
-				return
-
+				return fmt.Errorf("failed to edit config: %w", editErr)
 			}
 			var cfgNew cluster.Config
 			unMarshallErr := toml.Unmarshal([]byte(str), &cfgNew)
 			if unMarshallErr != nil {
-				fmt.Printf("%s failed to unmarshall config %s", messageUtils.ErrorMsg("Error"), unMarshallErr)
-				return
+				return fmt.Errorf("failed to unmarshal config: %w", unMarshallErr)
 			}
 			writeErr := cluster.WriteClusterConfig(cfgNew)
 			if writeErr != nil {
-				fmt.Printf("%s failed to write edtied config to the config file %s", messageUtils.ErrorMsg("Error"), writeErr)
-				return
+				return fmt.Errorf("failed to write edited config to the config file: %w", writeErr)
 			}
 			fmt.Printf("%s wrote new config to the config file.", messageUtils.SuccessMsg("Success"))
-
+			return nil
 		},
 	}
 

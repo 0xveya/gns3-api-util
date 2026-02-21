@@ -16,22 +16,17 @@ func NewPoolCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 resource pools.`,
 	}
 
-	// Create subcommands
 	poolCmd.AddCommand(create.NewCreatePoolCmd())
 
-	// Get subcommands
 	poolCmd.AddCommand(get.NewGetPoolsCmd())
 	poolCmd.AddCommand(get.NewGetPoolCmd())
 	poolCmd.AddCommand(get.NewGetPoolResourcesCmd())
 
-	// Update subcommands
 	poolCmd.AddCommand(update.NewUpdatePoolCmd())
 
-	// Delete subcommands
 	poolCmd.AddCommand(delete.NewDeletePoolCmd())
 	poolCmd.AddCommand(delete.NewDeletePoolResourceCmd())
 
-	// Add subcommands
 	poolCmd.AddCommand(add.NewAddToPoolCmd())
 
 	return poolCmd

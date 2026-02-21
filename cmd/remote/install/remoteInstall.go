@@ -2,7 +2,6 @@ package install
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -32,7 +31,7 @@ func NewRemoteInstallCmd() *cobra.Command {
 		interactive       bool
 	)
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "gns3 [user]",
 		Short: "Install GNS3 server on a remote machine",
 		Long: `Install GNS3 server on a remote machine via SSH.
@@ -46,18 +45,18 @@ This command will:
 
 The installation supports Ubuntu LTS releases and requires Python 3.9+.`,
 		Args: cobra.ExactArgs(1),
-		PreRun: func(cmd *cobra.Command, args []string) {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
 			// Handle interactive mode
 			if interactive {
 				editedText, err := utils.EditTextWithEditor(gns3.InteractiveOptionsText, "txt")
 				if err != nil {
-					log.Fatalf("failed to edit options: %v", err)
+					return fmt.Errorf("failed to edit options: %w", err)
 				}
 
 				// Parse the edited options
 				interactiveArgs, err := gns3.ParseInteractiveOptions(editedText)
 				if err != nil {
-					log.Fatalf("failed to parse interactive options: %v", err)
+					return fmt.Errorf("failed to parse interactive options: %w", err)
 				}
 
 				// Override the flag values with interactive values
@@ -73,13 +72,14 @@ The installation supports Ubuntu LTS releases and requires Python 3.9+.`,
 				enableI386 = interactiveArgs.EnableI386
 				verbose = interactiveArgs.Verbose
 			}
+			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			sshUser := args[0]
 
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				log.Fatalf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			gns3Args := gns3.InstallGNS3Args{
@@ -97,20 +97,19 @@ The installation supports Ubuntu LTS releases and requires Python 3.9+.`,
 			}
 
 			if err := gns3.ValidateInstallGNS3Input(gns3Args); err != nil {
-				log.Fatalf("validation error: %v", err)
+				return fmt.Errorf("validation error: %w", err)
 			}
 
 			hostname, sshPort := gns3.ParseServerURLForSSH(cfg.Server, port)
 
 			fmt.Printf("%s %s\n", messageUtils.Bold("🔧"), messageUtils.Bold("GNS3 Server Installation"))
-			fmt.Printf("%s\n", messageUtils.Seperator(strings.Repeat("─", 50)))
+			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, sshUser, sshPort, privateKeyPath, verbose)
 			if err != nil {
-				fmt.Printf("%s Failed to connect via SSH: %v\n", messageUtils.ErrorMsg("Failed to connect via SSH"), err)
-				return
+				return fmt.Errorf("failed to connect via SSH: %w", err)
 			}
 			defer func() {
 				if sshClient != nil {
@@ -121,8 +120,7 @@ The installation supports Ubuntu LTS releases and requires Python 3.9+.`,
 
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
 			if err := sshClient.CheckPrivileges(); err != nil {
-				fmt.Printf("%s Privilege check failed: %v\n", messageUtils.ErrorMsg("Privilege check failed"), err)
-				return
+				return fmt.Errorf("privilege check failed: %w", err)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
@@ -140,22 +138,19 @@ SCRIPT_EOF`, editedScript)
 
 			result, err := sshClient.ExecuteCommand(createScriptCmd)
 			if err != nil || !result.Success {
-				fmt.Printf("%s Failed to create installation script: %v\n", messageUtils.ErrorMsg("Failed to create installation script"), err)
-				return
+				return fmt.Errorf("failed to create installation script: %w", err)
 			}
 
 			// Make script executable
 			chmodResult, err := sshClient.ExecuteCommand("chmod +x /tmp/gns3_install.sh")
 			if err != nil || !chmodResult.Success {
-				fmt.Printf("%s Failed to make script executable: %v\n", messageUtils.ErrorMsg("Failed to make script executable"), err)
-				return
+				return fmt.Errorf("failed to make script executable: %w", err)
 			}
 
 			// Execute the script and capture output
 			execResult, err := sshClient.ExecuteCommand("bash /tmp/gns3_install.sh")
 			if err != nil {
-				fmt.Printf("%s Failed to execute GNS3 installation script: %v\n", messageUtils.ErrorMsg("Failed to execute GNS3 installation script"), err)
-				return
+				return fmt.Errorf("failed to execute GNS3 installation script: %w", err)
 			}
 
 			// Clean up script file
@@ -169,7 +164,7 @@ SCRIPT_EOF`, editedScript)
 				fmt.Printf("%s Saving installation state...\n", messageUtils.InfoMsg("Saving installation state"))
 				stateManager, err := gns3.NewStateManager()
 				if err != nil {
-					fmt.Printf("%s failed to create state manager: %v\n", messageUtils.WarningMsg("failed to create state manager"), err)
+					fmt.Printf("%s: %v\n", fmt.Errorf("failed to create state manager"), err)
 				} else {
 					state := gns3.GNS3ServerState{
 						ServerHost:        hostname,
@@ -188,7 +183,7 @@ SCRIPT_EOF`, editedScript)
 					}
 
 					if err := stateManager.SaveState(hostname, state); err != nil {
-						fmt.Printf("%s failed to save state: %v\n", messageUtils.WarningMsg("failed to save state"), err)
+						fmt.Printf("%s: %v\n", fmt.Errorf("failed to save state"), err)
 					} else {
 						fmt.Printf("%s State saved for server %s\n", messageUtils.SuccessMsg("State saved for server"), hostname)
 					}
@@ -210,14 +205,15 @@ SCRIPT_EOF`, editedScript)
 				}
 			} else {
 				if execResult.Stderr != "" {
-					fmt.Printf("%s\n", messageUtils.ErrorMsg(execResult.Stderr))
+					fmt.Printf("%s\n", execResult.Stderr)
 				}
 				if execResult.Stdout != "" {
 					fmt.Printf("%s Script output:\n", messageUtils.InfoMsg("Script output"))
 					fmt.Printf("%s\n", messageUtils.InfoMsg(execResult.Stdout))
 				}
-				return
+				return fmt.Errorf("GNS3 installation failed")
 			}
+			return nil
 		},
 	}
 

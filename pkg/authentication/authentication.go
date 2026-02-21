@@ -98,7 +98,6 @@ func tryKey(key pathUtils.GNS3Key, cfg config.GlobalOptions) ([]byte, bool) {
 	} else {
 		return body, false
 	}
-
 }
 
 func SaveAuthData(cfg config.GlobalOptions, token schemas.Token, username string) error {
@@ -143,7 +142,7 @@ func SaveAuthData(cfg config.GlobalOptions, token schemas.Token, username string
 		keys = append(keys, newKey)
 	}
 
-	f, err := os.OpenFile(keyFileLocation, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(keyFileLocation, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to open key file %q: %w", keyFileLocation, err)
 	}
@@ -172,7 +171,6 @@ func SaveAuthData(cfg config.GlobalOptions, token schemas.Token, username string
 }
 
 func GetKeyForServer(cfg config.GlobalOptions) (string, error) {
-
 	var keyFileLocation string
 	if cfg.KeyFile != "" {
 		k, err := pathUtils.ExpandPath(cfg.KeyFile)

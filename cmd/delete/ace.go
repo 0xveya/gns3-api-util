@@ -15,20 +15,19 @@ func NewDeleteACECmd() *cobra.Command {
 		Long:    `Delete an Access Control Entry (ACE) from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 acl delete ace-id",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			aceID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(aceID) {
-				fmt.Println("ACE ID must be a valid UUID")
-				return
+				return fmt.Errorf("ACE ID must be a valid UUID")
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteACE", []string{aceID})
+			return nil
 		},
 	}
 

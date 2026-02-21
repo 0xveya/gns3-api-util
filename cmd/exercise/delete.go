@@ -1,9 +1,11 @@
 package exercise
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,7 +20,7 @@ import (
 )
 
 func NewExerciseDeleteCmd() *cobra.Command {
-	var deleteExerciseCmd = &cobra.Command{
+	deleteExerciseCmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete an exercise",
 		Long: `Delete an exercise (project) and its associated resources. This command can:
@@ -91,24 +93,20 @@ func deleteExerciseInCluster(cfg config.GlobalOptions, clusterName, exerciseName
 		}
 	}
 
-	conn, err := db.InitIfNeeded()
+	ctx := context.Background()
+	store, err := db.Init()
 	if err != nil {
 		return fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if conn != nil {
-			_ = conn.Close()
-		}
-	}()
 
-	clusters, err := db.GetClusters(conn)
+	clusters, err := store.GetClusters(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get clusters: %w", err)
 	}
 	clusterID := 0
 	for _, c := range clusters {
 		if strings.EqualFold(strings.TrimSpace(c.Name), strings.TrimSpace(clusterName)) {
-			clusterID = c.Id
+			clusterID = int(c.ClusterID)
 			break
 		}
 	}
@@ -116,15 +114,16 @@ func deleteExerciseInCluster(cfg config.GlobalOptions, clusterName, exerciseName
 		return fmt.Errorf("cluster not found: %s", clusterName)
 	}
 
-	nodes, err := db.GetNodes(conn)
+	nodes, err := store.GetNodes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get nodes: %w", err)
 	}
 
 	for _, n := range nodes {
-		if n.ClusterID != clusterID {
+		if n.ClusterID != int64(clusterID) {
 			continue
 		}
+
 		nodeCfg := cfg
 		nodeCfg.Server = fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
 		err := deleteExerciseWithConfirmation(nodeCfg, exerciseName, className, groupName, false)
@@ -145,60 +144,25 @@ func deleteExerciseInCluster(cfg config.GlobalOptions, clusterName, exerciseName
 	return nil
 }
 
-func getAllExerciseNamesFromCluster(cfg config.GlobalOptions, clusterName string) ([]string, error) {
-	conn, err := db.InitIfNeeded()
+func getAllExerciseNamesFromCluster(_ config.GlobalOptions, clusterName string, ctx context.Context) ([]string, error) {
+	store, err := db.Init()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if conn != nil {
-			_ = conn.Close()
-		}
-	}()
-
-	clusters, err := db.GetClusters(conn)
+	names, err := store.GetAllExerciseNameFromCluster(ctx, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get clusters: %w", err)
+		return nil, fmt.Errorf("failed to get exercise names: %w", err)
 	}
-	clusterID := 0
-	for _, c := range clusters {
-		if strings.EqualFold(strings.TrimSpace(c.Name), strings.TrimSpace(clusterName)) {
-			clusterID = c.Id
-			break
-		}
-	}
-	if clusterID == 0 {
-		return nil, fmt.Errorf("cluster not found: %s", clusterName)
-	}
-	nodes, err := db.GetNodes(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nodes: %w", err)
-	}
-
-	seen := make(map[string]bool)
 	var out []string
-	for _, n := range nodes {
-		if n.ClusterID != clusterID {
-			continue
-		}
-		nodeCfg := cfg
-		nodeCfg.Server = fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
-		names, err := getAllExerciseNames(nodeCfg)
-		if err != nil {
-			continue
-		}
-		for _, nm := range names {
-			if !seen[nm] {
-				seen[nm] = true
-				out = append(out, nm)
-			}
-		}
+	for _, n := range names {
+		val := reflect.ValueOf(n).String()
+		out = append(out, val)
 	}
 	return out, nil
 }
 
-func selectExercisesWithFuzzyFromCluster(cfg config.GlobalOptions, clusterName string, multi bool) ([]string, error) {
-	names, err := getAllExerciseNamesFromCluster(cfg, clusterName)
+func selectExercisesWithFuzzyFromCluster(cfg config.GlobalOptions, clusterName string, multi bool, ctx context.Context) ([]string, error) {
+	names, err := getAllExerciseNamesFromCluster(cfg, clusterName, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +200,8 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 		confirm = false
 	}
 
-	// Validate flag combinations
+	ctx := context.Background()
+
 	if exerciseName != "" && nonInteractive != "" {
 		return fmt.Errorf("cannot specify both --name and --non-interactive")
 	}
@@ -287,7 +252,6 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 		if exerciseName != "" || nonInteractive != "" {
 			return fmt.Errorf("cannot specify both selection and explicit exercise name")
 		}
-
 	}
 
 	if nonInteractive != "" {
@@ -315,7 +279,7 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 		var exerciseNames []string
 		var err error
 		if clusterName != "" {
-			exerciseNames, err = getAllExerciseNamesFromCluster(cfg, clusterName)
+			exerciseNames, err = getAllExerciseNamesFromCluster(cfg, clusterName, ctx)
 		} else {
 			exerciseNames, err = getAllExerciseNames(cfg)
 		}
@@ -340,29 +304,6 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		dbConn, err := db.InitIfNeeded()
-		if err != nil {
-			fmt.Printf("%v Failed to initialize database: %v\n",
-				messageUtils.WarningMsg("Warning"),
-				err)
-		} else {
-			defer func() {
-				if dbConn != nil {
-					_ = dbConn.Close()
-				}
-			}()
-
-			_, err = dbConn.Exec(`DELETE FROM exercises`)
-			if err != nil {
-				fmt.Printf("%v Failed to clean up exercise database entries: %v\n",
-					messageUtils.WarningMsg("Warning"),
-					err)
-			} else {
-				fmt.Printf("%v Deleted all exercise database entries\n",
-					messageUtils.SuccessMsg("Cleaned up database"))
-			}
-		}
-
 		for _, name := range exerciseNames {
 			var derr error
 			if clusterName != "" {
@@ -378,14 +319,14 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else if className != "" {
-		if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm); err != nil {
+		if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm, ctx); err != nil {
 			return fmt.Errorf("failed to delete exercises for class: %w", err)
 		}
 	} else if selectExercise || (!selectClass && !selectGroup) {
 		var exerciseNames []string
 		var err error
 		if clusterName != "" {
-			exerciseNames, err = selectExercisesWithFuzzyFromCluster(cfg, clusterName, multi)
+			exerciseNames, err = selectExercisesWithFuzzyFromCluster(cfg, clusterName, multi, ctx)
 		} else {
 			exerciseNames, err = selectExercisesWithFuzzy(cfg, multi)
 		}
@@ -414,7 +355,7 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		if className != "" {
-			if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm); err != nil {
+			if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm, ctx); err != nil {
 				return fmt.Errorf("failed to delete exercises for class: %w", err)
 			}
 		} else {
@@ -527,7 +468,7 @@ func deleteExerciseWithConfirmation(cfg config.GlobalOptions, exerciseName, clas
 	return nil
 }
 
-func deleteAllExercisesForClassWithConfirmation(cfg config.GlobalOptions, className string, confirm bool) error {
+func deleteAllExercisesForClassWithConfirmation(cfg config.GlobalOptions, className string, confirm bool, ctx context.Context) error {
 	if confirm {
 		if !utils.ConfirmPrompt(fmt.Sprintf("Delete all exercises for class '%s'?", className), false) {
 			fmt.Println("Deletion cancelled.")
@@ -535,17 +476,12 @@ func deleteAllExercisesForClassWithConfirmation(cfg config.GlobalOptions, classN
 		}
 	}
 
-	dbConn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err == nil {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				fmt.Printf("failed to close database connection: %v", err)
-			}
-		}()
-		_, err = dbConn.Exec(`DELETE FROM exercises WHERE class = ?`, className)
+		err = store.DeleteExerciseForClass(ctx, className)
 		if err != nil {
 			fmt.Printf("%v Failed to delete exercises for class %s from database: %v\n",
-				messageUtils.WarningMsg("Warning"), className, err)
+				fmt.Errorf("Warning"), className, err)
 		}
 	}
 

@@ -226,6 +226,7 @@ func (GetEndpoints) ProjectFile(projectID, filePath string) string {
 func (GetEndpoints) NodeFile(projectID, nodeID, filePath string) string {
 	return fmt.Sprintf("/projects/%s/nodes/%s/files/%s", projectID, nodeID, filePath)
 }
+
 func (GetEndpoints) StreamPcap(projectID, linkID string) string {
 	return fmt.Sprintf("/projects/%s/links/%s/capture/stream", projectID, linkID)
 }

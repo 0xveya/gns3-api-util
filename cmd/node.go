@@ -16,12 +16,10 @@ func NewNodeCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 nodes.`,
 	}
 
-	// Create subcommands
 	nodeCmd.AddCommand(create.NewCreateNodeCmd())
 	nodeCmd.AddCommand(create.NewCreateNodeFromTemplateCmd())
 	nodeCmd.AddCommand(create.NewCreateQemuDiskImageCmd())
 
-	// Get subcommands
 	nodeCmd.AddCommand(get.NewGetNodeCmd())
 	nodeCmd.AddCommand(get.NewGetNodesCmd())
 	nodeCmd.AddCommand(get.NewGetNodesAutoIdlePCCmd())
@@ -29,7 +27,6 @@ func NewNodeCmdGroup() *cobra.Command {
 	nodeCmd.AddCommand(get.NewGetNodeFileCmd())
 	nodeCmd.AddCommand(get.NewGetNodeLinksCmd())
 
-	// Post subcommands
 	nodeCmd.AddCommand(post.NewNodeDuplicateCmd())
 	nodeCmd.AddCommand(post.NewNodeConsoleResetCmd())
 	nodeCmd.AddCommand(post.NewNodeIsolateCmd())
@@ -39,10 +36,8 @@ func NewNodeCmdGroup() *cobra.Command {
 	nodeCmd.AddCommand(post.NewStopNodesCmd())
 	nodeCmd.AddCommand(post.NewSuspendNodesCmd())
 
-	// Update subcommands
 	nodeCmd.AddCommand(update.NewUpdateNodeCmd())
 
-	// Delete subcommands
 	nodeCmd.AddCommand(delete.NewDeleteNodeCmd())
 
 	return nodeCmd

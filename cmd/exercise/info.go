@@ -9,6 +9,7 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/fuzzy"
+	clusterutils "github.com/stefanistkuhl/gns3util/pkg/utils/clusterUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
@@ -29,25 +30,22 @@ func runExerciseInfo(cmd *cobra.Command, args []string) error {
 	}
 	clusterName, _ := cmd.Flags().GetString("cluster")
 
-	clusterID, err := resolveExerciseClusterID(cfg, clusterName)
+	store, err := db.Init()
+	if err != nil {
+		return fmt.Errorf("failed to init db: %w", err)
+	}
+
+	clusterID, err := clusterutils.ResolveClusterID(cfg, clusterName, cmd.Context())
 	if err != nil {
 		return err
 	}
 
-	conn, err := db.InitIfNeeded()
-	if err != nil {
-		return fmt.Errorf("failed to init db: %w", err)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	nodes, err := db.GetNodeExercisesForClass(conn, clusterID, "")
+	rows, err := store.GetNodeExercisesForCluster(cmd.Context(), int64(clusterID))
 	if err != nil {
 		return fmt.Errorf("failed to get exercise distribution: %w", err)
 	}
+
+	nodes := clusterutils.TransformNodeExercises(rows, "")
 
 	nameSet := make(map[string]struct{})
 	for _, n := range nodes {

@@ -12,7 +12,7 @@ import (
 func NewGetSnapshotsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName + " [project-name/id]",
 		Short:   "Get the snapshots within a project by name or id",
 		Long:    `Get the snapshots within a project by name or id`,
@@ -35,23 +35,21 @@ func NewGetSnapshotsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				snapshots, err := utils.GetResourceWithContext(cfg, "getSnapshots", ids, "project", "Project:")
 				if err != nil {
-					fmt.Printf("Error getting snapshots: %v\n", err)
-					return
+					return fmt.Errorf("error getting snapshots: %w", err)
 				}
 
 				utils.PrintResourceWithContext(snapshots, "Project:")
@@ -60,12 +58,12 @@ func NewGetSnapshotsCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getSnapshots", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project")

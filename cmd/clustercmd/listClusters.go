@@ -3,73 +3,72 @@ package clustercmd
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
-	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
 func NewLsClusterCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "ls [cluster-name]",
+		Use:   "ls",
 		Short: "list all clusters",
 		Long:  `list all clusters`,
-		Run: func(cmd *cobra.Command, args []string) {
-			data, openErr := db.InitIfNeeded()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, openErr := db.Init()
 			if openErr != nil {
-				fmt.Printf("%s %s", messageUtils.ErrorMsg("Error"), openErr)
-				return
+				return fmt.Errorf("failed to initialize database: %w", openErr)
 			}
-			clusters, fetchErr := db.GetClusters(data)
+			clusters, fetchErr := store.GetClusters(cmd.Context())
 			if fetchErr != nil {
-				if fetchErr == sql.ErrNoRows {
+				if errors.Is(fetchErr, sql.ErrNoRows) {
 					fmt.Printf("No clusters found")
-					return
+					return nil
 				}
-				fmt.Printf("%s %s", messageUtils.ErrorMsg("Error"), fetchErr)
-				return
+				return fmt.Errorf("failed to get clusters: %w", fetchErr)
 			}
 			raw, _ := cmd.InheritedFlags().GetBool("raw")
 			noColor, _ := cmd.InheritedFlags().GetBool("no-color")
 			if raw {
 				mar, err := json.Marshal(clusters)
 				if err != nil {
-					fmt.Printf("%s failed to marshall the results %s", messageUtils.ErrorMsg("Error"), err)
+					return fmt.Errorf("failed to marshal results: %w", err)
 				}
 				if noColor {
 					utils.PrintJsonUgly(mar)
-					return
+					return nil
 				} else {
 					utils.PrintJson(mar)
-					return
+					return nil
 				}
 			}
-			utils.PrintTable(clusters, []utils.Column[db.ClusterName]{
+			utils.PrintTable(clusters, []utils.Column[sqlc.Cluster]{
 				{
 					Header: "ID",
-					Value: func(c db.ClusterName) string {
-						return fmt.Sprintf("%d", c.Id)
+					Value: func(c sqlc.Cluster) string {
+						return fmt.Sprintf("%d", c.ClusterID)
 					},
 				},
 				{
 					Header: "Name",
-					Value: func(c db.ClusterName) string {
+					Value: func(c sqlc.Cluster) string {
 						return c.Name
 					},
 				},
 				{
 					Header: "Desc",
-					Value: func(c db.ClusterName) string {
-						if c.Desc.Valid {
-							return c.Desc.String
+					Value: func(c sqlc.Cluster) string {
+						if c.Description.Valid {
+							return c.Description.String
 						}
 						return "N/A"
 					},
 				},
 			})
-
+			return nil
 		},
 	}
 

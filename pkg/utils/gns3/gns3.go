@@ -79,7 +79,7 @@ func NewStateManager() (*StateManager, error) {
 	}
 
 	stateDir := filepath.Join(homeDir, ".gns3")
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
@@ -94,7 +94,7 @@ func (sm *StateManager) SaveState(serverHost string, state GNS3ServerState) erro
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+	if err := os.WriteFile(stateFile, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -355,21 +355,21 @@ func ParseInteractiveOptions(optionsText string) (InstallGNS3Args, error) {
 				args.GNS3Port = port
 			}
 		case "DISABLE_KVM":
-			args.DisableKVM = strings.ToLower(value) == "true"
+			args.DisableKVM = strings.EqualFold(value, "true")
 		case "INSTALL_DOCKER":
-			args.InstallDocker = strings.ToLower(value) == "true"
+			args.InstallDocker = strings.EqualFold(value, "true")
 		case "INSTALL_VIRTUALBOX":
-			args.InstallVirtualBox = strings.ToLower(value) == "true"
+			args.InstallVirtualBox = strings.EqualFold(value, "true")
 		case "INSTALL_VMWARE":
-			args.InstallVMware = strings.ToLower(value) == "true"
+			args.InstallVMware = strings.EqualFold(value, "true")
 		case "USE_IOU":
-			args.UseIOU = strings.ToLower(value) == "true"
+			args.UseIOU = strings.EqualFold(value, "true")
 		case "ENABLE_I386_FOR_IOU":
-			args.EnableI386 = strings.ToLower(value) == "true"
+			args.EnableI386 = strings.EqualFold(value, "true")
 		case "VERBOSE":
-			args.Verbose = strings.ToLower(value) == "true"
+			args.Verbose = strings.EqualFold(value, "true")
 		case "PRESERVE_DATA":
-			args.PreserveData = strings.ToLower(value) == "true"
+			args.PreserveData = strings.EqualFold(value, "true")
 		}
 	}
 

@@ -10,17 +10,18 @@ import (
 )
 
 func NewGetRolesCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get the roles of the Server",
 		Long:    `Get the roles of the Server`,
 		Example: "gns3util -s https://controller:3080 role ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getRoles", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -29,7 +30,7 @@ func NewGetRolesCmd() *cobra.Command {
 func NewGetRoleCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [role-name/id]",
 		Short:   "Get a role by id or name",
 		Long:    `Get a role by id or name`,
@@ -52,29 +53,28 @@ func NewGetRoleCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getRoles", "name", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "role", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getRole", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a role")
@@ -85,7 +85,7 @@ func NewGetRoleCmd() *cobra.Command {
 func NewGetRolePrivsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "privileges [role-name/id]",
 		Short:   "Get the privileges of a role by id or name",
 		Long:    `Get the privileges of a role by id or name`,
@@ -108,23 +108,21 @@ func NewGetRolePrivsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getRoles", "name", multi, "role", "Role:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				rolePrivs, err := utils.GetResourceWithContext(cfg, "getRolePrivs", ids, "role", "Role:")
 				if err != nil {
-					fmt.Printf("Error getting role privileges: %v\n", err)
-					return
+					return fmt.Errorf("error getting role privileges: %w", err)
 				}
 
 				utils.PrintResourceWithContext(rolePrivs, "Role:")
@@ -133,12 +131,12 @@ func NewGetRolePrivsCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "role", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getRolePrivs", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a role")

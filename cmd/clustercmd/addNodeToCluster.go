@@ -1,11 +1,17 @@
 package clustercmd
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
+	"github.com/stefanistkuhl/gns3util/pkg/utils/colorUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
@@ -32,6 +38,39 @@ func NewAddNodeCmd() *cobra.Command {
 			if len(opts.Servers) > 1 {
 				return fmt.Errorf("add-node only supports a single --server. Use add-nodes for multiple. ")
 			}
+
+			clusterName := args[0]
+			usesID := false
+			found := false
+			clusterID, err := strconv.Atoi(clusterName)
+			if err == nil {
+				usesID = true
+			}
+			store, err := db.Init()
+			ctx := context.Background()
+			clusters, err := store.GetClusters(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get clusters: %w", err)
+			}
+			for _, c := range clusters {
+				if !usesID {
+					if c.Name == clusterName {
+						opts.ClusterID = int(c.ClusterID)
+						found = true
+						break
+					}
+				} else {
+					if int(c.ClusterID) == clusterID {
+						opts.ClusterID = int(c.ClusterID)
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				fmt.Printf("%s\n", colorUtils.Error("Cluster not found"))
+				return nil
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,22 +82,64 @@ func NewAddNodeCmd() *cobra.Command {
 				return fmt.Errorf("no nodes added")
 			}
 
-			insertedNodes, err := db.InsertNodes(opts.ClusterID, nodes)
+			store, err := db.Init()
+			if err != nil {
+				return fmt.Errorf("failed to init db: %w", err)
+			}
+			ctx := context.Background()
+			tx, err := store.DB.BeginTx(context.Background(), nil)
+			if err != nil {
+				return fmt.Errorf("failed to begin transaction: %w", err)
+			}
+			defer func() {
+				if err != nil {
+					rollbackErr := tx.Rollback()
+					if rollbackErr != nil {
+						fmt.Printf("failed to rollback transaction: %v", rollbackErr)
+					}
+				}
+				_ = tx.Commit()
+			}()
+			qtx := store.WithTx(tx)
+
+			var insertedNodes []sqlc.Node
+			for _, node := range nodes {
+				var maxGroups sql.NullInt64
+				if node.MaxGroups == 0 {
+					maxGroups = sql.NullInt64{Int64: 0, Valid: false}
+				} else {
+					maxGroups = sql.NullInt64{Int64: int64(node.MaxGroups), Valid: true}
+				}
+				nodeData := sqlc.InsertNodeIntoClusterParams{
+					ClusterID: int64(opts.ClusterID),
+					Protocol:  node.Protocol,
+					Host:      node.Host,
+					Port:      int64(node.Port),
+					Weight:    int64(node.Weight),
+					MaxGroups: maxGroups,
+					AuthUser:  node.User,
+				}
+				nodeDat, err := qtx.InsertNodeIntoCluster(ctx, nodeData)
+				if err != nil {
+					return fmt.Errorf("failed to insert node: %w", err)
+				}
+				insertedNodes = append(insertedNodes, nodeDat)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to insert node: %w", err)
 			}
 			for _, node := range insertedNodes {
-				fmt.Printf("Inserted node %s:%d with ID: %d\n", node.Host, node.Port, node.ID)
+				fmt.Printf("Inserted node %s:%d with ID: %d\n", node.Host, node.Port, node.NodeID)
 			}
 			cfg, cfgErr := cluster.LoadClusterConfig()
 			if cfgErr != nil {
-				if cfgErr == cluster.ErrNoConfig {
+				if errors.Is(cfgErr, cluster.ErrNoConfig) {
 					cfg = cluster.NewConfig()
 				} else {
 					return fmt.Errorf("failed to load config: %w", cfgErr)
 				}
 			}
-			cfg, changed, syncErr := cluster.SyncConfigWithDb(cfg)
+			cfg, changed, syncErr := cluster.SyncConfigWithDb(cmd.Context(), cfg)
 			if syncErr != nil {
 				return fmt.Errorf("failed to sync config with db: %w", syncErr)
 			}
@@ -94,8 +175,41 @@ func NewAddNodesCmd() *cobra.Command {
 				fmt.Println(messageUtils.InfoMsg("No servers provided, will enter interactive mode."))
 				return nil
 			}
-			if len(opts.Servers) == 1 {
-				return fmt.Errorf("add-nodes requires at least 2 --server entries. Use add-node for one. ")
+			if len(opts.Servers) > 1 {
+				return fmt.Errorf("add-node only supports a single --server. Use add-nodes for multiple. ")
+			}
+
+			clusterName := args[0]
+			usesID := false
+			found := false
+			clusterID, err := strconv.Atoi(clusterName)
+			if err == nil {
+				usesID = true
+			}
+			store, err := db.Init()
+			ctx := context.Background()
+			clusters, err := store.GetClusters(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get clusters: %w", err)
+			}
+			for _, c := range clusters {
+				if !usesID {
+					if c.Name == clusterName {
+						opts.ClusterID = int(c.ClusterID)
+						found = true
+						break
+					}
+				} else {
+					if int(c.ClusterID) == clusterID {
+						opts.ClusterID = int(c.ClusterID)
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				fmt.Printf("%s\n", colorUtils.Error("Cluster not found"))
+				return nil
 			}
 			return nil
 		},
@@ -108,23 +222,61 @@ func NewAddNodesCmd() *cobra.Command {
 				return fmt.Errorf("no nodes added")
 			}
 
-			insertedNodes, err := db.InsertNodes(opts.ClusterID, nodes)
+			store, err := db.Init()
 			if err != nil {
-				return fmt.Errorf("DB insert error: %w", err)
+				return fmt.Errorf("failed to init db: %w", err)
+			}
+			ctx := context.Background()
+			tx, err := store.DB.BeginTx(context.Background(), nil)
+			if err != nil {
+				return fmt.Errorf("failed to begin transaction: %w", err)
+			}
+			defer func() {
+				if err != nil {
+					rollbackErr := tx.Rollback()
+					if rollbackErr != nil {
+						fmt.Printf("failed to rollback transaction: %v", rollbackErr)
+					}
+				}
+				_ = tx.Commit()
+			}()
+			qtx := store.WithTx(tx)
+			var insertedNodes []sqlc.Node
+			for _, node := range nodes {
+				var maxGroups sql.NullInt64
+				if node.MaxGroups == 0 {
+					maxGroups = sql.NullInt64{Int64: 0, Valid: false}
+				} else {
+					maxGroups = sql.NullInt64{Int64: int64(node.MaxGroups), Valid: true}
+				}
+				nodeData := sqlc.InsertNodeIntoClusterParams{
+					ClusterID: int64(opts.ClusterID),
+					Protocol:  node.Protocol,
+					Host:      node.Host,
+					Port:      int64(node.Port),
+					Weight:    int64(node.Weight),
+					MaxGroups: maxGroups,
+					AuthUser:  node.User,
+				}
+				nodeDat, err := qtx.InsertNodeIntoCluster(ctx, nodeData)
+				if err != nil {
+					return fmt.Errorf("failed to insert node: %w", err)
+				}
+				insertedNodes = append(insertedNodes, nodeDat)
 			}
 			for _, node := range insertedNodes {
-				fmt.Printf("Inserted node %s:%d with ID: %d\n", node.Host, node.Port, node.ID)
+				fmt.Printf("Inserted node %s:%d with ID: %d\n", node.Host, node.Port, node.NodeID)
 			}
 
 			cfg, cfgErr := cluster.LoadClusterConfig()
 			if cfgErr != nil {
-				if cfgErr == cluster.ErrNoConfig {
+				if errors.Is(cfgErr, cluster.ErrNoConfig) {
 					cfg = cluster.NewConfig()
 				} else {
 					return fmt.Errorf("failed to load config: %w", cfgErr)
 				}
 			}
-			cfg, changed, syncErr := cluster.SyncConfigWithDb(cfg)
+			cfg, changed, syncErr := cluster.SyncConfigWithDb(cmd.Context(), cfg)
 			if syncErr != nil {
 				return fmt.Errorf("failed to sync config with db: %w", syncErr)
 			}

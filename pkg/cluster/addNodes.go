@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -37,7 +38,7 @@ func RunAddNode(server string, opts *AddNodeOptions, cmd *cobra.Command) (db.Nod
 	cfg.Server = server
 	_, status, reqErr := utils.CallClient(cfg, "getMe", nil, nil)
 	if reqErr != nil || status != 200 {
-		return db.NodeData{}, fmt.Errorf("failed to query node %s: %v", server, reqErr)
+		return db.NodeData{}, fmt.Errorf("failed to query node %s: %w", server, reqErr)
 	}
 	port, toIntErr := strconv.Atoi(u.Port())
 	if toIntErr != nil {
@@ -67,7 +68,6 @@ func RunAddNodes(opts *AddNodeOptions, cmd *cobra.Command) ([]db.NodeData, error
 
 		cfg, _ := config.GetGlobalOptionsFromContext(cmd.Context())
 
-		// Load servers from keyfile
 		keys, err := authentication.LoadKeys(cfg.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load keyfile: %w", err)
@@ -77,7 +77,6 @@ func RunAddNodes(opts *AddNodeOptions, cmd *cobra.Command) ([]db.NodeData, error
 			return nil, fmt.Errorf("no servers found in keyfile. Please use 'auth login' to add servers")
 		}
 
-		// Create fuzzy picker options
 		serverOptions := make([]string, len(keys))
 		serverMap := make(map[string]string)
 		serverUserMap := make(map[string]string)
@@ -96,7 +95,6 @@ func RunAddNodes(opts *AddNodeOptions, cmd *cobra.Command) ([]db.NodeData, error
 			return nil, nil
 		}
 
-		// Convert selected display names to server URLs
 		if opts.ServerUsers == nil {
 			opts.ServerUsers = make(map[string]string)
 		}
@@ -118,7 +116,7 @@ func RunAddNodes(opts *AddNodeOptions, cmd *cobra.Command) ([]db.NodeData, error
 
 		fmt.Printf("\n%s\n", colorUtils.Info("Selected servers:"))
 		for _, server := range opts.Servers {
-			fmt.Printf("  %s %s\n", colorUtils.Seperator("•"), colorUtils.Highlight(server))
+			fmt.Printf("  %s %s\n", colorUtils.Separator("•"), colorUtils.Highlight(server))
 		}
 	}
 
@@ -165,36 +163,20 @@ func ValidateClusterAndCreds(clusterName string, opts *AddNodeOptions, cmd *cobr
 	_ = viper.BindPFlag("user", cmd.Flags().Lookup("user"))
 	_ = viper.BindPFlag("password", cmd.Flags().Lookup("password"))
 
-	dbConn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if dbConn != nil {
-			_ = dbConn.Close()
-		}
-	}()
 
-	clusters, fetchErr := db.QueryRows(dbConn,
-		"SELECT cluster_id, name, description FROM clusters WHERE name = ? LIMIT 1",
-		func(rows *sql.Rows) (db.ClusterName, error) {
-			var c db.ClusterName
-			err := rows.Scan(&c.Id, &c.Name, &c.Desc)
-			return c, err
-		},
-		clusterName,
-	)
-	if clusters == nil {
-		return fmt.Errorf("no clusters found")
-	}
+	cluster, fetchErr := store.CheckClusterExistsWithData(cmd.Context(), clusterName)
 	if fetchErr != nil {
-		if fetchErr == sql.ErrNoRows || len(clusters) == 0 {
+		if errors.Is(fetchErr, sql.ErrNoRows) {
 			return fmt.Errorf("cluster %s not found", clusterName)
 		}
 		return fmt.Errorf("failed to query cluster: %w", fetchErr)
 	}
 
-	opts.ClusterID = clusters[0].Id
+	opts.ClusterID = int(cluster.ClusterID)
 
 	if !cmd.Flags().Changed("user") {
 		opts.Username = viper.GetString("user")

@@ -39,33 +39,29 @@ func NewNodeDuplicateCmd() *cobra.Command {
 		Long:    `Duplicate a node in a project on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node duplicate [project-name/id] [node-name/id]`,
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			nodeID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(nodeID) {
-				fmt.Println("Node ID must be a valid UUID")
-				return
+				return fmt.Errorf("node ID must be a valid UUID")
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -81,8 +77,7 @@ func NewNodeDuplicateCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to duplicate node: %v", err)
-				return
+				return fmt.Errorf("failed to duplicate node: %w", err)
 			}
 			defer func() {
 				if resp != nil {
@@ -93,8 +88,9 @@ func NewNodeDuplicateCmd() *cobra.Command {
 			if resp.StatusCode == 201 {
 				fmt.Printf("%s Node duplicated successfully\n", messageUtils.SuccessMsg("Node duplicated successfully"))
 			} else {
-				fmt.Printf("Failed to duplicate node with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to duplicate node with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -108,33 +104,29 @@ func NewNodeConsoleResetCmd() *cobra.Command {
 		Long:    `Reset a console for a given node on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node node-console-reset [project-name/id] [node-name/id]`,
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			nodeID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(nodeID) {
-				fmt.Println("Node ID must be a valid UUID")
-				return
+				return fmt.Errorf("node ID must be a valid UUID")
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -150,8 +142,7 @@ func NewNodeConsoleResetCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to reset node console: %v", err)
-				return
+				return fmt.Errorf("failed to reset console: %w", err)
 			}
 			defer func() {
 				if resp != nil {
@@ -160,10 +151,11 @@ func NewNodeConsoleResetCmd() *cobra.Command {
 			}()
 
 			if resp.StatusCode == 204 {
-				fmt.Printf("%s Node console reset successfully\n", messageUtils.SuccessMsg("Node console reset successfully"))
+				fmt.Printf("%s Console reset successfully\n", messageUtils.SuccessMsg("Console reset successfully"))
 			} else {
-				fmt.Printf("Failed to reset node console with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to reset console with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -177,33 +169,29 @@ func NewNodeIsolateCmd() *cobra.Command {
 		Long:    `Isolate a node by suspending all attached links on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node node-isolate [project-name/id] [node-name/id]`,
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			nodeID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(nodeID) {
-				fmt.Println("Node ID must be a valid UUID")
-				return
+				return fmt.Errorf("node ID must be a valid UUID")
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -219,8 +207,7 @@ func NewNodeIsolateCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to isolate node: %v", err)
-				return
+				return fmt.Errorf("failed to isolate node: %w", err)
 			}
 			defer func() {
 				if resp != nil {
@@ -231,8 +218,9 @@ func NewNodeIsolateCmd() *cobra.Command {
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Node isolated successfully\n", messageUtils.SuccessMsg("Node isolated successfully"))
 			} else {
-				fmt.Printf("Failed to isolate node with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to isolate node with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -246,33 +234,29 @@ func NewNodeUnisolateCmd() *cobra.Command {
 		Long:    `Un-isolate a node by resuming all attached suspended links on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node node-unisolate [project-name/id] [node-name/id]`,
 		Args:    cobra.ExactArgs(2),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			nodeID := args[1]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			if !utils.IsValidUUIDv4(nodeID) {
-				fmt.Println("Node ID must be a valid UUID")
-				return
+				return fmt.Errorf("node ID must be a valid UUID")
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -288,20 +272,20 @@ func NewNodeUnisolateCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to unisolate node: %v", err)
-				return
+				return fmt.Errorf("failed to un-isolate node: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+				if resp != nil {
+					_ = resp.Body.Close()
 				}
 			}()
 
 			if resp.StatusCode == 204 {
-				fmt.Printf("%s Node unisolated successfully\n", messageUtils.SuccessMsg("Node unisolated successfully"))
+				fmt.Printf("%s Node un-isolated successfully\n", messageUtils.SuccessMsg("Node un-isolated successfully"))
 			} else {
-				fmt.Printf("Failed to unisolate node with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to un-isolate node with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -315,27 +299,24 @@ func NewReloadNodesCmd() *cobra.Command {
 		Long:    `Reload all nodes belonging to a given project on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node reload-all [project-name/id]`,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -351,20 +332,20 @@ func NewReloadNodesCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to reload nodes: %v", err)
-				return
+				return fmt.Errorf("failed to reload nodes: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+				if resp != nil {
+					_ = resp.Body.Close()
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Nodes reloaded successfully\n", messageUtils.SuccessMsg("Nodes reloaded successfully"))
 			} else {
-				fmt.Printf("Failed to reload nodes with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to reload nodes with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -378,27 +359,24 @@ func NewStartNodesCmd() *cobra.Command {
 		Long:    `Start all nodes belonging to a given project on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node start-all [project-name/id]`,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -414,20 +392,20 @@ func NewStartNodesCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to start nodes: %v", err)
-				return
+				return fmt.Errorf("failed to start nodes: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+				if resp != nil {
+					_ = resp.Body.Close()
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Nodes started successfully\n", messageUtils.SuccessMsg("Nodes started successfully"))
 			} else {
-				fmt.Printf("Failed to start nodes with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to start nodes with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -441,27 +419,24 @@ func NewStopNodesCmd() *cobra.Command {
 		Long:    `Stop all nodes belonging to a given project on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node stop-all [project-name/id]`,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -477,20 +452,20 @@ func NewStopNodesCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to stop nodes: %v", err)
-				return
+				return fmt.Errorf("failed to stop nodes: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+				if resp != nil {
+					_ = resp.Body.Close()
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Nodes stopped successfully\n", messageUtils.SuccessMsg("Nodes stopped successfully"))
 			} else {
-				fmt.Printf("Failed to stop nodes with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to stop nodes with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 
@@ -504,27 +479,24 @@ func NewSuspendNodesCmd() *cobra.Command {
 		Long:    `Suspend all nodes belonging to a given project on the GNS3 server.`,
 		Example: `gns3util -s https://controller:3080 post node suspend-all [project-name/id]`,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
 				id, err := utils.ResolveID(cfg, "project", projectID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				projectID = id
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Printf("failed to get token: %v", err)
-				return
+				return fmt.Errorf("failed to get token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -540,20 +512,20 @@ func NewSuspendNodesCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Printf("failed to suspend nodes: %v", err)
-				return
+				return fmt.Errorf("failed to suspend nodes: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+				if resp != nil {
+					_ = resp.Body.Close()
 				}
 			}()
 
 			if resp.StatusCode == 204 {
 				fmt.Printf("%s Nodes suspended successfully\n", messageUtils.SuccessMsg("Nodes suspended successfully"))
 			} else {
-				fmt.Printf("Failed to suspend nodes with status %d", resp.StatusCode)
+				return fmt.Errorf("failed to suspend nodes with status %d", resp.StatusCode)
 			}
+			return nil
 		},
 	}
 

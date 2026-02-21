@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -32,31 +33,30 @@ func LoadClusterConfig() (Config, error) {
 	return c, nil
 }
 
-func EnsureConfigSyncedFromDB() (Config, bool, error) {
+func EnsureConfigSyncedFromDB(ctx context.Context) (Config, bool, error) {
 	cfg, err := LoadClusterConfig()
 	if err != nil {
 		if errors.Is(err, ErrNoConfig) {
-			conn, openErr := db.InitIfNeeded()
+			store, openErr := db.Init()
 			if openErr != nil {
 				return Config{}, false, fmt.Errorf("db open error: %w", openErr)
 			}
-			defer func() {
-				if conn != nil {
-					_ = conn.Close()
-				}
-			}()
+			defer store.DB.Close()
 
-			dbClusters, ferr := db.GetClusters(conn)
-			if ferr != nil && ferr != sql.ErrNoRows {
+			dbClusters, ferr := store.GetClusters(ctx)
+			if ferr != nil && !errors.Is(ferr, sql.ErrNoRows) {
 				return Config{}, false, fmt.Errorf("error fetching clusters: %w", ferr)
 			}
-			dbNodes, nerr := db.GetNodes(conn)
-			if nerr != nil && nerr != sql.ErrNoRows {
+			dbNodes, nerr := store.GetNodes(ctx)
+			if nerr != nil && !errors.Is(nerr, sql.ErrNoRows) {
 				return Config{}, false, fmt.Errorf("error fetching nodes: %w", nerr)
 			}
 
 			base := NewConfig()
-			bootstrapped, _ := MergeConfigWithDb(base, dbClusters, dbNodes)
+			bootstrapped, _, mergeErr := mergeConfigWithDb(base, dbClusters, dbNodes)
+			if mergeErr != nil {
+				return Config{}, false, fmt.Errorf("merge config: %w", mergeErr)
+			}
 
 			if err := WriteClusterConfig(bootstrapped); err != nil {
 				return Config{}, false, fmt.Errorf("failed to write new config: %w", err)
@@ -66,7 +66,13 @@ func EnsureConfigSyncedFromDB() (Config, bool, error) {
 		return Config{}, false, err
 	}
 
-	inSync, cerr := CheckConfigWithDb(cfg, false)
+	store, openErr := db.Init()
+	if openErr != nil {
+		return cfg, false, fmt.Errorf("db open error: %w", openErr)
+	}
+	defer store.DB.Close()
+
+	inSync, cerr := CheckConfigWithDb(ctx, store, cfg, false)
 	if cerr != nil {
 		return cfg, false, cerr
 	}
@@ -74,7 +80,7 @@ func EnsureConfigSyncedFromDB() (Config, bool, error) {
 		return cfg, false, nil
 	}
 
-	cfgNew, changed, serr := SyncConfigWithDb(cfg)
+	cfgNew, changed, serr := SyncConfigWithDb(ctx, cfg)
 	if serr != nil {
 		return cfg, false, serr
 	}
@@ -101,8 +107,5 @@ func WriteClusterConfig(c Config) error {
 	if marshallErr != nil {
 		return marshallErr
 	}
-	if err := os.WriteFile(path, res, 0o644); err != nil {
-		return err
-	}
-	return nil
+	return os.WriteFile(path, res, 0o644)
 }

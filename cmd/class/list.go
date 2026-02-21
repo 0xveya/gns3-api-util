@@ -1,18 +1,21 @@
 package class
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
+	clusterutils "github.com/stefanistkuhl/gns3util/pkg/utils/clusterUtils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
 )
 
 func NewClassLsCmd() *cobra.Command {
-	var listCmd = &cobra.Command{
+	listCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List all classes and their distribution across cluster nodes",
 		Long: `List all classes and show their distribution across cluster nodes, including:
@@ -44,7 +47,7 @@ func runListClasses(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot specify both --db-only and --api-only")
 	}
 
-	clusterID, err := resolveClusterID(cfg, clusterName)
+	clusterID, err := clusterutils.ResolveClusterID(cfg, clusterName, cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -168,7 +171,7 @@ func runListClasses(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			fmt.Printf("\n  %s\n", messageUtils.Bold(nodeURL))
-			names := truncateList(nodeInfo.GroupNames, 80)
+			names := clusterutils.TruncateList(nodeInfo.GroupNames, 80)
 			fmt.Printf("    %s %d\n", messageUtils.Highlight("Group Names:"), len(nodeInfo.GroupNames))
 			for _, name := range names {
 				fmt.Printf("    - %s\n", name)
@@ -194,145 +197,52 @@ type NodeInfo struct {
 }
 
 func getClassDistributionFromDB(clusterID int) ([]ClassDistribution, error) {
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
 
-	rows, qerr := conn.Query(`
-SELECT
-  c.name AS class_name,
-  c.description AS class_desc,
-  n.protocol || '://' || n.host || ':' || CAST(n.port AS TEXT) AS node_url,
-  g.name AS group_name,
-  u.username AS username
-FROM classes c
-JOIN groups g
-  ON g.class_id = c.class_id
-JOIN users u
-  ON u.group_id = g.group_id
-JOIN group_assignments ga
-  ON ga.group_id = g.group_id
-JOIN nodes n
-  ON n.node_id = ga.node_id
-WHERE c.cluster_id = ?
-ORDER BY c.name, n.node_id, g.group_id, u.user_id;
-`, clusterID)
-	if qerr != nil {
-		return nil, fmt.Errorf("failed to query class distribution: %w", qerr)
+	rawDist, err := store.GetClassDisribution(context.Background(), int64(clusterID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get class distribution: %w", err)
 	}
-	defer func() {
-		if err := rows.Err(); err != nil {
-			fmt.Printf("failed to iterate over rows: %v", err)
-		}
-	}()
 
-	classMap := make(map[string]ClassDistribution)
-	for rows.Next() {
-		var className, classDesc, nodeURL, groupName, username string
-		if err := rows.Scan(&className, &classDesc, &nodeURL, &groupName, &username); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		dist, ok := classMap[className]
-		if !ok {
-			dist = ClassDistribution{
-				Name:        className,
-				Description: classDesc,
+	classMap := make(map[string]*ClassDistribution)
+	seenGroups := make(map[string]bool)
+
+	for _, row := range rawDist {
+		if _, ok := classMap[row.ClassName]; !ok {
+			classMap[row.ClassName] = &ClassDistribution{
+				Name:        row.ClassName,
+				Description: row.ClassDesc.String,
 				Nodes:       make(map[string]NodeInfo),
 			}
 		}
-		node := dist.Nodes[nodeURL]
-		if node.GroupNames == nil {
-			node.GroupNames = []string{}
-		}
-		seen := false
-		for _, gn := range node.GroupNames {
-			if gn == groupName {
-				seen = true
-				break
-			}
-		}
-		if !seen {
-			node.GroupNames = append(node.GroupNames, groupName)
-			node.GroupCount++
-		}
-		node.UserCount++
-		dist.Nodes[nodeURL] = node
-		classMap[className] = dist
-	}
+		nodeUrl := reflect.ValueOf(row.NodeUrl).String()
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iter rows: %w", err)
+		c := classMap[row.ClassName]
+		node := c.Nodes[nodeUrl]
+
+		node.UserCount++
+
+		groupKey := nodeUrl + row.GroupName
+		if !seenGroups[groupKey] {
+			node.GroupCount++
+			node.GroupNames = append(node.GroupNames, row.GroupName)
+			seenGroups[groupKey] = true
+		}
+
+		c.Nodes[nodeUrl] = node
 	}
 
 	var result []ClassDistribution
-	for _, v := range classMap {
-		result = append(result, v)
+	for _, dist := range classMap {
+		result = append(result, *dist)
 	}
+
 	return result, nil
 }
 
 func getClassDistributionFromAPI() ([]ClassDistribution, error) {
 	return []ClassDistribution{}, nil
-}
-
-func resolveClusterID(cfg config.GlobalOptions, clusterName string) (int, error) {
-	conn, err := db.InitIfNeeded()
-	if err != nil {
-		return 0, fmt.Errorf("failed to init db: %w", err)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	if clusterName != "" {
-		clusters, err := db.GetClusters(conn)
-		if err != nil {
-			return 0, fmt.Errorf("failed to get clusters: %w", err)
-		}
-		for _, c := range clusters {
-			if c.Name == clusterName {
-				return c.Id, nil
-			}
-		}
-		return 0, fmt.Errorf("cluster not found: %s", clusterName)
-	}
-
-	if cfg.Server == "" {
-		return 0, fmt.Errorf("no server configured; use -s or provide -c cluster name")
-	}
-	urlObj := utils.ValidateUrlWithReturn(cfg.Server)
-	if urlObj == nil {
-		return 0, fmt.Errorf("invalid server url: %s", cfg.Server)
-	}
-	derived := fmt.Sprintf("%s%s", urlObj.Hostname(), "_single_node_cluster")
-	clusters, err := db.GetClusters(conn)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get clusters: %w", err)
-	}
-	for _, c := range clusters {
-		if c.Name == derived {
-			return c.Id, nil
-		}
-	}
-	return 0, fmt.Errorf("cluster not found: %s", derived)
-}
-
-func truncateList(items []string, maxLen int) []string {
-	out := make([]string, len(items))
-	for i, s := range items {
-		if maxLen > 3 && len(s) > maxLen {
-			out[i] = s[:maxLen-3] + "..."
-		} else {
-			out[i] = s
-		}
-	}
-	return out
 }

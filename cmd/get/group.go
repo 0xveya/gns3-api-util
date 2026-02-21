@@ -12,7 +12,7 @@ import (
 func NewGetGroupCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [group-name/id]",
 		Short:   "Get a group by id or name",
 		Long:    `Get a group by id or name`,
@@ -35,29 +35,28 @@ func NewGetGroupCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getGroups", "name", multi)
 				err := fuzzy.FuzzyInfo(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			} else {
 				id := args[0]
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "group", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getGroup", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a group")
@@ -66,17 +65,18 @@ func NewGetGroupCmd() *cobra.Command {
 }
 
 func NewGetGroupsCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName,
 		Short:   "Get all groups of the Server",
 		Long:    `Get all groups of the Server`,
 		Example: "gns3util -s https://controller:3080 group ls",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			utils.ExecuteAndPrint(cfg, "getGroups", nil)
+			return nil
 		},
 	}
 	return cmd
@@ -85,7 +85,7 @@ func NewGetGroupsCmd() *cobra.Command {
 func NewGetGroupMembersCmd() *cobra.Command {
 	var multi bool
 	var useFuzzy bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "members [group-name/id]",
 		Short:   "Get the members of a group by id or name",
 		Long:    `Get the members of a group by id or name`,
@@ -108,23 +108,21 @@ func NewGetGroupMembersCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getGroups", "name", multi, "group", "Group:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				groupMembers, err := utils.GetResourceWithContext(cfg, "getGroupMembers", ids, "group", "Group:")
 				if err != nil {
-					fmt.Printf("Error getting group members: %v\n", err)
-					return
+					return fmt.Errorf("error getting group members: %w", err)
 				}
 
 				utils.PrintResourceWithContext(groupMembers, "Group:")
@@ -133,12 +131,12 @@ func NewGetGroupMembersCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(id) {
 					id, err = utils.ResolveID(cfg, "group", id, nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getGroupMembers", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a group")

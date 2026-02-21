@@ -21,7 +21,7 @@ func NewCreateUserCmd() *cobra.Command {
 		flagUseJSON  string
 	)
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "new",
 		Short:   "Create a user account",
 		Long:    "Create a new user account on the GNS3v3 controller. Either provide -u and -p (and optional fields) or pass a full JSON payload using --use-json.",

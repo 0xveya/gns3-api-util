@@ -15,24 +15,23 @@ func NewDeleteRoleCmd() *cobra.Command {
 		Long:    `Delete a role from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 role delete my-role",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			roleID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(roleID) {
 				id, err := utils.ResolveID(cfg, "role", roleID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				roleID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteRole", []string{roleID})
+			return nil
 		},
 	}
 

@@ -15,24 +15,23 @@ func NewDeleteUserCmd() *cobra.Command {
 		Long:    `Delete a user from the GNS3 server.`,
 		Example: "gns3util -s https://controller:3080 user delete my-user",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			userID := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			if !utils.IsValidUUIDv4(userID) {
 				id, err := utils.ResolveID(cfg, "user", userID, nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 				userID = id
 			}
 
 			utils.ExecuteAndPrint(cfg, "deleteUser", []string{userID})
+			return nil
 		},
 	}
 

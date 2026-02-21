@@ -16,24 +16,19 @@ func NewUserCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 users.`,
 	}
 
-	// Create subcommands
 	userCmd.AddCommand(create.NewCreateUserCmd())
 
-	// Get subcommands
 	userCmd.AddCommand(get.NewGetUserCmd())
 	userCmd.AddCommand(get.NewGetUsersCmd())
 	userCmd.AddCommand(get.NewGetMeCmd())
 	userCmd.AddCommand(get.NewGetGroupMembershipsCmd())
 
-	// Post subcommands
 	userCmd.AddCommand(post.NewUserAuthenticateCmd())
 
-	// Update subcommands
 	userCmd.AddCommand(update.NewUpdateMeCmd())
 	userCmd.AddCommand(update.NewUpdateUserCmd())
 	userCmd.AddCommand(update.NewChangePasswordCmd())
 
-	// Delete subcommands
 	userCmd.AddCommand(delete.NewDeleteUserCmd())
 
 	return userCmd

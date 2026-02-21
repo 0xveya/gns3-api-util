@@ -16,10 +16,8 @@ func NewProjectCmdGroup() *cobra.Command {
 		Long:  `Create, manage, and manipulate GNS3 projects.`,
 	}
 
-	// Create subcommands
 	projectCmd.AddCommand(create.NewCreateProjectCmd())
 
-	// Get subcommands
 	projectCmd.AddCommand(get.NewGetProjectCmd())
 	projectCmd.AddCommand(get.NewGetProjectsCmd())
 	projectCmd.AddCommand(get.NewGetProjectExportCmd())
@@ -27,7 +25,6 @@ func NewProjectCmdGroup() *cobra.Command {
 	projectCmd.AddCommand(get.NewGetProjectLockedCmd())
 	projectCmd.AddCommand(get.NewGetProjectStatsCmd())
 
-	// Post subcommands
 	projectCmd.AddCommand(post.NewProjectCloseCmd())
 	projectCmd.AddCommand(post.NewProjectDuplicateCmd())
 	projectCmd.AddCommand(post.NewProjectImportCmd())
@@ -38,10 +35,8 @@ func NewProjectCmdGroup() *cobra.Command {
 	projectCmd.AddCommand(post.NewProjectWriteFileCmd())
 	projectCmd.AddCommand(post.NewProjectStartCaptureCmd())
 
-	// Update subcommands
 	projectCmd.AddCommand(update.NewUpdateProjectCmd())
 
-	// Delete subcommands
 	projectCmd.AddCommand(delete.NewDeleteProjectCmd())
 
 	return projectCmd

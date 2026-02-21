@@ -34,6 +34,7 @@ func Formatf(msgType MessageType, format string, a ...any) string {
 	message := fmt.Sprintf(format, a...)
 	return Format(msgType, message)
 }
+
 func SuccessMsg(message string) string {
 	return Format(Success, message)
 }
@@ -78,6 +79,6 @@ func Highlight(message string) string {
 	return colorUtils.Highlight(message)
 }
 
-func Seperator(message string) string {
-	return colorUtils.Seperator(message)
+func Separator(message string) string {
+	return colorUtils.Separator(message)
 }

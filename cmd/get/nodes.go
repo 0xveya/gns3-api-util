@@ -13,7 +13,7 @@ import (
 func NewGetNodesCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName + " [project-name/id]",
 		Short:   "Get the nodes within a project by name or id",
 		Long:    `Get the nodes within a project by name or id`,
@@ -36,23 +36,21 @@ func NewGetNodesCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				projectNodes, err := utils.GetResourceWithContext(cfg, "getNodes", ids, "project", "Project:")
 				if err != nil {
-					fmt.Printf("Error getting nodes: %v\n", err)
-					return
+					return fmt.Errorf("error getting nodes: %w", err)
 				}
 
 				utils.PrintResourceWithContext(projectNodes, "Project:")
@@ -61,12 +59,12 @@ func NewGetNodesCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getNodes", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project")
@@ -77,7 +75,7 @@ func NewGetNodesCmd() *cobra.Command {
 func NewGetNodeCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [project-name/id] [node-name/id]",
 		Short:   "Get a node in a project by name or id",
 		Long:    `Get a node in a project by name or id`,
@@ -100,34 +98,30 @@ func NewGetNodeCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting nodes: %v\n", err)
-					return
+					return fmt.Errorf("error getting nodes: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var nodeIDs []string
@@ -140,8 +134,7 @@ func NewGetNodeCmd() *cobra.Command {
 				})
 
 				if len(nodeIDs) == 0 {
-					fmt.Println("No nodes found in selected project")
-					return
+					return fmt.Errorf("no nodes found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(nodeIDs, multi)
@@ -155,19 +148,18 @@ func NewGetNodeCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				if !utils.IsValidUUIDv4(args[1]) {
 					nodeID, err = utils.ResolveID(cfg, "node", args[1], []string{projectID})
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getNode", []string{projectID, nodeID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and node")
@@ -178,7 +170,7 @@ func NewGetNodeCmd() *cobra.Command {
 func NewGetNodeLinksCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "links [project-name/id] [node-name/id]",
 		Short:   "Get links of a given node in a project by id or name",
 		Long:    `Get links of a given node in a project by id or name`,
@@ -201,34 +193,30 @@ func NewGetNodeLinksCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting nodes: %v\n", err)
-					return
+					return fmt.Errorf("error getting nodes: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var nodeIDs []string
@@ -241,8 +229,7 @@ func NewGetNodeLinksCmd() *cobra.Command {
 				})
 
 				if len(nodeIDs) == 0 {
-					fmt.Println("No nodes found in selected project")
-					return
+					return fmt.Errorf("no nodes found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(nodeIDs, multi)
@@ -256,19 +243,18 @@ func NewGetNodeLinksCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				if !utils.IsValidUUIDv4(args[1]) {
 					nodeID, err = utils.ResolveID(cfg, "node", args[1], []string{projectID})
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getNodeLinks", []string{projectID, nodeID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and node")
@@ -279,7 +265,7 @@ func NewGetNodeLinksCmd() *cobra.Command {
 func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "auto-idle-pc [project-name/id] [node-name/id]",
 		Short:   "Get the auto-idle-pc of a node in a project by id or name",
 		Long:    `Get the auto-idle-pc of a node in a project by id or name`,
@@ -302,34 +288,30 @@ func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting nodes: %v\n", err)
-					return
+					return fmt.Errorf("error getting nodes: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var nodeIDs []string
@@ -342,8 +324,7 @@ func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 				})
 
 				if len(nodeIDs) == 0 {
-					fmt.Println("No nodes found in selected project")
-					return
+					return fmt.Errorf("no nodes found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(nodeIDs, multi)
@@ -357,19 +338,18 @@ func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				if !utils.IsValidUUIDv4(args[1]) {
 					nodeID, err = utils.ResolveID(cfg, "node", args[1], []string{projectID})
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getNodeAutoIdlePc", []string{projectID, nodeID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and node")
@@ -380,7 +360,7 @@ func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 func NewGetNodesAutoIdlePCProposalsCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "auto-idle-pc-proposals [project-name/id] [node-name/id]",
 		Short:   "Get the auto-idle-pc-proposals of a node in a project by id or name",
 		Long:    `Get the auto-idle-pc-proposals of a node in a project by id or name`,
@@ -403,34 +383,30 @@ func NewGetNodesAutoIdlePCProposalsCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting nodes: %v\n", err)
-					return
+					return fmt.Errorf("error getting nodes: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var nodeIDs []string
@@ -443,8 +419,7 @@ func NewGetNodesAutoIdlePCProposalsCmd() *cobra.Command {
 				})
 
 				if len(nodeIDs) == 0 {
-					fmt.Println("No nodes found in selected project")
-					return
+					return fmt.Errorf("no nodes found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(nodeIDs, multi)
@@ -458,19 +433,18 @@ func NewGetNodesAutoIdlePCProposalsCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				if !utils.IsValidUUIDv4(args[1]) {
 					nodeID, err = utils.ResolveID(cfg, "node", args[1], []string{projectID})
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getNodeAutoIdlePcProposals", []string{projectID, nodeID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and node")

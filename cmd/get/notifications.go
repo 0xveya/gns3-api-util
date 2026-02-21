@@ -25,17 +25,15 @@ func NewGetNotificationsCmd() *cobra.Command {
 		Short:   "Stream the notification of the controller",
 		Long:    `Stream the notification of the controller`,
 		Example: "gns3util -s https://controller:3080 get notifications",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to get global options: %v\n", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to get authentication token: %v\n", err)
-				return
+				return fmt.Errorf("failed to get authentication token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -54,16 +52,15 @@ func NewGetNotificationsCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "request failed: %v\n", err)
-				return
+				return fmt.Errorf("request failed: %w", err)
 			}
 			if resp == nil {
-				fmt.Fprintln(os.Stderr, "no response received")
-				return
+				return fmt.Errorf("no response received")
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
@@ -87,13 +84,14 @@ func NewGetNotificationsCmd() *cobra.Command {
 
 			if err := scanner.Err(); err != nil {
 				if err == context.Canceled || err == context.DeadlineExceeded {
-					return
+					return nil
 				}
 				if strings.Contains(err.Error(), "use of closed network connection") {
-					return
+					return nil
 				}
-				fmt.Fprintf(os.Stderr, "error reading stream: %v\n", err)
+				return fmt.Errorf("error reading stream: %w", err)
 			}
+			return nil
 		},
 	}
 	cmd.Flags().IntVarP(&timeout, "timeout", "t", 5, "Timeout in seconds (0 for stream until cancellation)")
@@ -108,25 +106,22 @@ func NewGetProjectNotificationCmd() *cobra.Command {
 		Long:    `Stream the notification of a project by id or name`,
 		Example: "gns3util -s https://controller:3080 project notifications my-project",
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to get global options: %v\n", err)
-				return
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if !utils.IsValidUUIDv4(args[0]) {
 				id, err = utils.ResolveID(cfg, "project", args[0], nil)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 			}
 
 			token, err := authentication.GetKeyForServer(cfg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to get authentication token: %v\n", err)
-				return
+				return fmt.Errorf("failed to get authentication token: %w", err)
 			}
 
 			settings := api.NewSettings(
@@ -145,16 +140,15 @@ func NewGetProjectNotificationCmd() *cobra.Command {
 
 			_, resp, err := client.Do(reqOpts)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "request failed: %v\n", err)
-				return
+				return fmt.Errorf("request failed: %w", err)
 			}
 			if resp == nil {
-				fmt.Fprintln(os.Stderr, "no response received")
-				return
+				return fmt.Errorf("no response received")
 			}
 			defer func() {
 				if err := resp.Body.Close(); err != nil {
-					fmt.Printf("failed to close response body: %v", err)
+					// Keep silent on body close errors
+					_ = err
 				}
 			}()
 
@@ -178,13 +172,14 @@ func NewGetProjectNotificationCmd() *cobra.Command {
 
 			if err := scanner.Err(); err != nil {
 				if err == context.Canceled || err == context.DeadlineExceeded {
-					return
+					return nil
 				}
 				if strings.Contains(err.Error(), "use of closed network connection") {
-					return
+					return nil
 				}
-				fmt.Fprintf(os.Stderr, "error reading stream: %v\n", err)
+				return fmt.Errorf("error reading stream: %w", err)
 			}
+			return nil
 		},
 	}
 	cmd.Flags().IntVarP(&timeout, "timeout", "t", 5, "Timeout in seconds (0 for stream until cancellation)")

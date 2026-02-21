@@ -5,12 +5,13 @@ import (
 )
 
 func NewAuthCmdGroup() *cobra.Command {
-	var authCmd = &cobra.Command{
+	authCmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Authentication commands",
 		Long:  `Authentication commands`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
+			return nil
 		},
 	}
 

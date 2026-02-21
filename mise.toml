@@ -1,0 +1,57 @@
+[env]
+BUILD_DIR = "dist"
+BINARY_NAME = "gns3util"
+VERSION = "{{exec(command='git describe --tags --always --dirty')}}"
+
+[tools]
+go = "1.25"
+sqlite = "latest"
+golangci-lint = "latest"
+sqlc = "latest"
+goreleaser = "latest"
+"github:nrempel/sleek" = "v0.5.0"
+"go:mvdan.cc/gofumpt" = "latest"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+
+[tasks.test]
+description = "Run tests"
+run = "go test ./..."
+
+[tasks.build]
+description = "Build for current platform"
+run = "go build -v -o $BINARY_NAME ."
+
+[tasks.build-all]
+description = "Build for all platforms using Goreleaser"
+run = "goreleaser build --snapshot --clean"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = ["rm -rf $BUILD_DIR", "rm -f $BINARY_NAME"]
+
+[tasks.test-release]
+description = "Create a test release (dry run)"
+run = "goreleaser release --snapshot --clean"
+
+[tasks.format]
+description = "Run all formatters (Go and SQL)"
+depends = ["format-go", "format-sql"]
+
+[tasks."format-go"]
+description = "Format Go code with goimports and gofumpt"
+run = ["goimports -w .", "gofumpt -w .", "go mod tidy"]
+
+[tasks.format-sql]
+description = "Format SQL files"
+run = [
+  "sleek 'pkg/cluster/db/querys/*.sql'",
+  "sleek 'pkg/cluster/db/schema.sql'",
+]
+
+[tasks.lint]
+description = "Run linter"
+run = "golangci-lint run -c .golangci.yml"
+
+[tasks.sqlc]
+description = "Generate SQL files"
+run = "sqlc generate"

@@ -3,7 +3,6 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
 	"github.com/stefanistkuhl/gns3util/pkg/api/schemas"
@@ -13,34 +12,34 @@ import (
 )
 
 func NewAuthStatusCmd() *cobra.Command {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check the current status of your Authentication",
 		Long:  `Check the current status of your Authentication`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			var user schemas.User
 
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				log.Fatalf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
 			keys, err := authentication.LoadKeys(cfg.KeyFile)
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("failed to load keys: %w", err)
 			}
 
 			userData, err := authentication.TryKeys(keys, cfg)
 			if err != nil {
-				fmt.Println(err)
-				return
+				return err
 			}
 
 			err = json.Unmarshal([]byte(userData), &user)
 			if err != nil {
-				log.Fatalf("Error unmarshaling JSON: %v", err)
+				return fmt.Errorf("error unmarshaling JSON: %w", err)
 			}
 			fmt.Printf("%s logged in as user %s", messageUtils.SuccessMsg("Logged in as user"), messageUtils.Bold(*user.Username))
+			return nil
 		},
 	}
 	return cmd

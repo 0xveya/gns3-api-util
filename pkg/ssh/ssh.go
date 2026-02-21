@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -42,7 +43,7 @@ func (c *SSHClient) ExecuteCommand(command string) (*CommandResult, error) {
 
 	session, err := c.client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SSH session: %v", err)
+		return nil, fmt.Errorf("failed to create SSH session: %w", err)
 	}
 	defer func() {
 		if err := session.Close(); err != nil {
@@ -64,7 +65,8 @@ func (c *SSHClient) ExecuteCommand(command string) (*CommandResult, error) {
 	}
 
 	if err != nil {
-		if exitError, ok := err.(*ssh.ExitError); ok {
+		exitError := &ssh.ExitError{}
+		if errors.As(err, &exitError) {
 			result.ExitCode = exitError.ExitStatus()
 		} else {
 			result.ExitCode = -1
@@ -120,7 +122,7 @@ func ConnectWithKeyOrPassword(hostname, username string, port int, customPrivate
 	address := fmt.Sprintf("%s:%d", hostname, port)
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
+		return nil, fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
 
 	if verbose {
@@ -144,17 +146,17 @@ SCRIPT_EOF`, remotePath, scriptContent)
 
 	result, err := c.ExecuteCommand(createScriptCmd)
 	if err != nil || !result.Success {
-		return false, fmt.Errorf("failed to create script: %v", err)
+		return false, fmt.Errorf("failed to create script: %w", err)
 	}
 
 	chmodResult, err := c.ExecuteCommand(fmt.Sprintf("chmod +x %s", remotePath))
 	if err != nil || !chmodResult.Success {
-		return false, fmt.Errorf("failed to make script executable: %v", err)
+		return false, fmt.Errorf("failed to make script executable: %w", err)
 	}
 
 	execResult, err := c.ExecuteCommand(fmt.Sprintf("bash %s", remotePath))
 	if err != nil {
-		return false, fmt.Errorf("failed to execute script: %v", err)
+		return false, fmt.Errorf("failed to execute script: %w", err)
 	}
 
 	cleanupResult, _ := c.ExecuteCommand(fmt.Sprintf("rm -f %s", remotePath))
@@ -170,7 +172,7 @@ SCRIPT_EOF`, remotePath, scriptContent)
 func (c *SSHClient) CheckPrivileges() error {
 	uidResult, err := c.ExecuteCommand("id -u")
 	if err != nil {
-		return fmt.Errorf("failed to check user ID: %v", err)
+		return fmt.Errorf("failed to check user ID: %w", err)
 	}
 
 	if uidResult.Stdout == "0\n" {
@@ -182,7 +184,7 @@ func (c *SSHClient) CheckPrivileges() error {
 
 	sudoResult, err := c.ExecuteCommand("sudo -n true")
 	if err != nil {
-		return fmt.Errorf("user lacks passwordless sudo access: %v", err)
+		return fmt.Errorf("user lacks passwordless sudo access: %w", err)
 	}
 
 	if !sudoResult.Success {
@@ -225,12 +227,12 @@ func getPrivateKeyPaths(customPath string) []string {
 func loadPrivateKey(keyPath string) (ssh.Signer, error) {
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %v", err)
+		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %v", err)
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	return signer, nil

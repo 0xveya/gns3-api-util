@@ -1,17 +1,21 @@
 package class
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/stefanistkuhl/gns3util/pkg/api/schemas"
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db"
+	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/config"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
 	"github.com/stefanistkuhl/gns3util/pkg/utils/messageUtils"
@@ -69,36 +73,29 @@ func LoadClassFromFile(filePath string) (schemas.Class, error) {
 }
 
 func CreateClass(cfg config.GlobalOptions, clusterID int, classData schemas.Class, insertedNodes []db.NodeDataAll) (bool, error) {
-
-	conn, err := db.InitIfNeeded()
+	store, err := db.Init()
 	if err != nil {
 		return false, fmt.Errorf("failed to init db: %w", err)
 	}
+	ctx := context.Background()
+	tx, err := store.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to begin transaction: %w", err)
+	}
 	defer func() {
-		_ = conn.Close()
+		if err != nil {
+			_ = tx.Rollback()
+		}
 	}()
+	qtx := store.WithTx(tx)
 
 	assignedPerNode := make(map[int]int)
-	rows, qerr := conn.Query(`
-SELECT ga.node_id, COUNT(*)
-FROM group_assignments ga
-JOIN nodes n ON n.node_id = ga.node_id
-WHERE n.cluster_id = ?
-GROUP BY ga.node_id;
-`, clusterID)
-	if qerr == nil {
-		defer func() {
-			if err := rows.Err(); err != nil {
-				fmt.Printf("failed to iterate over rows: %v", err)
-			}
-		}()
-		for rows.Next() {
-			var nodeID, cnt int
-			if err := rows.Scan(&nodeID, &cnt); err == nil {
-				assignedPerNode[nodeID] = cnt
-			}
-		}
-		_ = rows.Err()
+	nas, nerr := qtx.GetNodeGroupAssignments(ctx, int64(clusterID))
+	if nerr != nil {
+		return false, fmt.Errorf("failed to get node group assignments: %w", nerr)
+	}
+	for _, na := range nas {
+		assignedPerNode[int(na.NodeID)] = int(na.Count)
 	}
 
 	nodesAdjusted := make([]db.NodeDataAll, 0, len(insertedNodes))
@@ -128,18 +125,53 @@ GROUP BY ga.node_id;
 		}
 	}
 
-	getClassErr := db.CheckIfClassExists(conn, clusterID, classData.Name)
+	getClass, getClassErr := qtx.CheckIfClassExists(ctx, sqlc.CheckIfClassExistsParams{
+		ClusterID: int64(clusterID),
+		Name:      classData.Name,
+	})
 	if getClassErr != nil {
-		if getClassErr == db.ErrClassExists {
-			return false, fmt.Errorf("the class %s already exists", messageUtils.Bold(classData.Name))
-		} else {
-			return false, fmt.Errorf("failed to check if the class %s exists %w", messageUtils.Bold(classData.Name), getClassErr)
-		}
+		return false, fmt.Errorf("failed to check if the class %s exists: %w", messageUtils.Bold(classData.Name), getClassErr)
+	}
+	if getClass == 1 {
+		return false, fmt.Errorf("the class %s already exists", messageUtils.Bold(classData.Name))
 	}
 
-	insertedData, addDbErr := db.InsertClassIntoDB(conn, clusterID, classData)
-	if addDbErr != nil {
-		return false, fmt.Errorf("failed to add class to db: %w", addDbErr)
+	classDesc := sql.NullString{String: classData.Desc, Valid: classData.Desc != ""}
+	classID, err := qtx.CreateClassReturning(ctx, sqlc.CreateClassReturningParams{
+		ClusterID:   int64(clusterID),
+		Name:        classData.Name,
+		Description: classDesc,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to create class: %w", err)
+	}
+
+	groupIDs := make(map[string]int64)
+	for _, g := range classData.Groups {
+		groupID, err := qtx.CreateGroupReturning(ctx, sqlc.CreateGroupReturningParams{
+			ClassID: classID,
+			Name:    g.Name,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to create group %s: %w", g.Name, err)
+		}
+		groupIDs[g.Name] = groupID
+
+		for _, u := range g.Students {
+			fullName := ""
+			if u.FullName != nil {
+				fullName = *u.FullName
+			}
+			_, err := qtx.CreateUserReturning(ctx, sqlc.CreateUserReturningParams{
+				GroupID:         groupID,
+				Username:        u.UserName,
+				FullName:        sql.NullString{String: fullName, Valid: fullName != ""},
+				DefaultPassword: u.Password,
+			})
+			if err != nil {
+				return false, fmt.Errorf("failed to create user %s: %w", u.UserName, err)
+			}
+		}
 	}
 
 	dist, err := distributeGroupsWithMode(
@@ -156,31 +188,41 @@ GROUP BY ga.node_id;
 		return false, fmt.Errorf("distribution failed: %w", err)
 	}
 
-	groupIDVals := make([]int, 0, len(insertedData.GroupIDs))
-	for _, v := range insertedData.GroupIDs {
+	groupIDVals := make([]int64, 0, len(groupIDs))
+	for _, v := range groupIDs {
 		groupIDVals = append(groupIDVals, v)
 	}
-	sort.Ints(groupIDVals)
+	slices.Sort(groupIDVals)
 
-	var assignments []db.AssignmentIds
 	offset := 0
 	for _, g := range dist {
-		a := db.AssignmentIds{NodeID: g.NodeID}
 		end := offset + g.NumGroups
 		end = min(end, len(groupIDVals))
-		a.GroupIDs = append(a.GroupIDs, groupIDVals[offset:end]...)
-		assignments = append(assignments, a)
+		for _, gid := range groupIDVals[offset:end] {
+			err := qtx.AssignGroupToNode(ctx, sqlc.AssignGroupToNodeParams{
+				NodeID:  int64(g.NodeID),
+				GroupID: gid,
+			})
+			if err != nil {
+				return false, fmt.Errorf("failed to assign group to node: %w", err)
+			}
+		}
 		offset = end
 	}
 
-	if err := db.AssignGroupsToNode(conn, db.NodeAndGroupIds{Assignments: assignments}); err != nil {
-		return false, fmt.Errorf("failed to assign groups to nodes: %w", err)
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	plans, err := db.GetNodeGroupNamesForClass(conn, clusterID, classData.Name)
+	planRows, err := store.GetNodeGroupNamesForClass(ctx, sqlc.GetNodeGroupNamesForClassParams{
+		ClusterID: int64(clusterID),
+		Name:      classData.Name,
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to get node group names: %w", err)
 	}
+
+	plans := transformNodeGroupRows(planRows)
 
 	emailByGroupUser := make(map[string]map[string]string)
 	for _, g := range classData.Groups {
@@ -214,20 +256,64 @@ GROUP BY ga.node_id;
 	return true, nil
 }
 
-func addUserToGroup(cfg config.GlobalOptions, userID, groupID string) error {
-	_, status, err := utils.CallClient(cfg, "addGroupMember", []string{groupID, userID}, nil)
-	if err != nil {
-		return fmt.Errorf("failed to add user to group: %w", err)
+func transformNodeGroupRows(rows []sqlc.GetNodeGroupNamesForClassRow) []db.NodeGroupsForClass {
+	results := make([]db.NodeGroupsForClass, 0)
+	var currentNodeURL string
+	var current *db.NodeGroupsForClass
+
+	for _, row := range rows {
+		nodeURL, ok := row.NodeUrl.(string)
+		if !ok {
+			continue
+		}
+		if nodeURL != currentNodeURL {
+			if current != nil {
+				results = append(results, *current)
+			}
+			current = &db.NodeGroupsForClass{
+				NodeURL: nodeURL,
+				Groups:  make([]db.GroupData, 0),
+			}
+			currentNodeURL = nodeURL
+		}
+
+		groupIndex := -1
+		for i, g := range current.Groups {
+			if g.Name == row.GroupName {
+				groupIndex = i
+				break
+			}
+		}
+
+		if groupIndex == -1 {
+			current.Groups = append(current.Groups, db.GroupData{
+				Name:     row.GroupName,
+				Students: make([]db.UserData, 0),
+			})
+			groupIndex = len(current.Groups) - 1
+		}
+
+		fullName := ""
+		if row.FullName.Valid {
+			fullName = row.FullName.String
+		}
+		current.Groups[groupIndex].Students = append(current.Groups[groupIndex].Students, db.UserData{
+			Username:  row.Username,
+			FullName:  fullName,
+			Password:  row.DefaultPassword,
+			GroupName: row.GroupName,
+		})
 	}
 
-	if status != 200 && status != 204 {
-		return fmt.Errorf("failed to add user to group: status %d", status)
+	if current != nil {
+		results = append(results, *current)
 	}
 
-	return nil
+	return results
 }
 
 func DeleteClass(cfg config.GlobalOptions, className string) error {
+	ctx := context.Background()
 	clusterID, err := getClusterIDForServer(cfg)
 
 	var (
@@ -236,15 +322,26 @@ func DeleteClass(cfg config.GlobalOptions, className string) error {
 	)
 
 	if err == nil && clusterID != 0 {
-		dbConn, dbErr := db.InitIfNeeded()
-		if dbErr == nil {
-			defer func() {
-				if err := dbConn.Close(); err != nil {
-					fmt.Printf("failed to close database connection: %v", err)
-				}
-			}()
+		store, err := db.Init()
+		if err != nil {
+			return fmt.Errorf("failed to init db: %w", err)
+		}
+		classes, err := store.GetClasses(ctx, int64(clusterID))
+		if err != nil {
+			return fmt.Errorf("failed to get classes: %w", err)
+		}
+		classID := int64(0)
+		for _, c := range classes {
+			if c.Name == className {
+				dbDeleted = true
+				classID = c.ClassID
+				break
+			}
+		}
 
-			if dbErr = deleteClassFromDB(clusterID, className); dbErr == nil {
+		if classID != 0 {
+			deleteClassError := store.DeleteClass(ctx, classID)
+			if deleteClassError == nil {
 				dbDeleted = true
 				fmt.Printf("%v Deleted class %v from database\n",
 					messageUtils.SuccessMsg("Success"),
@@ -253,20 +350,20 @@ func DeleteClass(cfg config.GlobalOptions, className string) error {
 				fmt.Printf("%v Failed to delete class %v from database: %v\n",
 					messageUtils.WarningMsg("Warning"),
 					messageUtils.Bold(className),
-					dbErr)
+					deleteClassError)
 			}
+		}
 
-			nodes, nerr := db.GetNodes(dbConn)
-			if nerr != nil {
-				fmt.Printf("%v Failed to get nodes for class deletion: %v\n",
-					messageUtils.WarningMsg("Warning"),
-					nerr)
-			} else {
-				nodeServers = make([]string, 0, len(nodes))
-				for _, n := range nodes {
-					if n.ClusterID == clusterID {
-						nodeServers = append(nodeServers, fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port))
-					}
+		nodes, nerr := store.GetNodes(ctx)
+		if nerr != nil {
+			fmt.Printf("%v Failed to get nodes for class deletion: %v\n",
+				messageUtils.WarningMsg("Warning"),
+				nerr)
+		} else {
+			nodeServers = make([]string, 0, len(nodes))
+			for _, n := range nodes {
+				if n.ClusterID == int64(clusterID) {
+					nodeServers = append(nodeServers, fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port))
 				}
 			}
 		}
@@ -365,7 +462,6 @@ func deleteClassFromAPI(cfg config.GlobalOptions, className string) error {
 		messageUtils.Bold(className))
 
 	allGroupsToDelete := append(studentGroups, classGroups...)
-
 	allUsersToDelete := make(map[string]string)
 
 	for _, group := range allGroupsToDelete {
@@ -479,17 +575,12 @@ func deleteUser(cfg config.GlobalOptions, userID string) error {
 }
 
 func DeleteExercise(cfg config.GlobalOptions, exerciseName, className, groupName string) error {
-	dbConn, err := db.InitIfNeeded()
-	if err != nil {
+	ctx := context.Background()
+	store, storeErr := db.Init()
+	if storeErr != nil {
 		fmt.Printf("%v Failed to initialize database: %v\n",
 			messageUtils.WarningMsg("Warning"),
-			err)
-	} else {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				fmt.Printf("failed to close database connection: %v", err)
-			}
-		}()
+			storeErr)
 	}
 
 	projects, err := getProjectsForExercise(cfg, exerciseName, className, groupName)
@@ -498,15 +589,15 @@ func DeleteExercise(cfg config.GlobalOptions, exerciseName, className, groupName
 	}
 
 	if len(projects) == 0 {
-		if dbConn != nil {
-			_, err := dbConn.Exec(`
-				DELETE FROM exercises 
-				WHERE name = ?`,
-				exerciseName)
-			if err != nil {
+		if storeErr == nil && className != "" {
+			deleteErr := store.DeleteExerciseScoped(ctx, sqlc.DeleteExerciseScopedParams{
+				Name:   exerciseName,
+				Name_2: className,
+			})
+			if deleteErr != nil {
 				fmt.Printf("%v Failed to clean up database entries: %v\n",
 					messageUtils.WarningMsg("Warning"),
-					err)
+					deleteErr)
 			}
 		}
 		return fmt.Errorf("%w: %s", ErrExerciseNotFound, exerciseName)
@@ -608,29 +699,30 @@ func DeleteExercise(cfg config.GlobalOptions, exerciseName, className, groupName
 				messageUtils.Bold(projectName))
 		}
 
-		if dbConn != nil {
-			_, err := dbConn.Exec(`
-				DELETE FROM exercises 
-				WHERE project_uuid = ?`,
-				projectID)
-			if err != nil {
-				fmt.Printf("%v Failed to delete database entry for project %s: %v\n",
+		if storeErr == nil {
+			deleteProjectErr := store.DeleteExerciseRecord(ctx, projectID)
+			if deleteProjectErr != nil {
+				fmt.Printf("%v Failed to delete exercise record for project %s: %v\n",
 					messageUtils.WarningMsg("Warning"),
-					projectID,
-					err)
+					projectName,
+					deleteProjectErr)
+			} else {
+				fmt.Printf("%v Deleted exercise record for project %s\n",
+					messageUtils.SuccessMsg("Success"),
+					messageUtils.Bold(projectName))
 			}
 		}
 	}
 
-	if dbConn != nil {
-		_, err := dbConn.Exec(`
-			DELETE FROM exercises 
-			WHERE name = ?`,
-			exerciseName)
-		if err != nil {
+	if storeErr == nil && className != "" {
+		deleteErr := store.DeleteExerciseScoped(ctx, sqlc.DeleteExerciseScopedParams{
+			Name:   exerciseName,
+			Name_2: className,
+		})
+		if deleteErr != nil {
 			fmt.Printf("%v Failed to clean up exercise database entries: %v\n",
 				messageUtils.WarningMsg("Warning"),
-				err)
+				deleteErr)
 		}
 	}
 
@@ -646,94 +738,54 @@ func getProjectsForExercise(cfg config.GlobalOptions, exerciseName, className, g
 		return nil, fmt.Errorf("exercise name cannot be empty")
 	}
 
-	dbConn, err := db.InitIfNeeded()
-	if err != nil {
+	ctx := context.Background()
+	store, storeErr := db.Init()
+	if storeErr != nil {
 		fmt.Printf("%v Failed to initialize database (will try API): %v\n",
-			messageUtils.WarningMsg("Warning"), err)
+			messageUtils.WarningMsg("Warning"), storeErr)
 	} else {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				fmt.Printf("failed to close database connection: %v", err)
-			}
-		}()
-
-		query := `
-			SELECT e.project_uuid, e.name, c.name as class_name, g.name as group_name
-			FROM exercises e
-			JOIN groups g ON e.group_id = g.group_id
-			JOIN classes c ON g.class_id = c.class_id
-			WHERE e.name = ?
-		`
-		args := []any{exerciseName}
-
-		if className != "" {
-			query += " AND c.name = ?"
-			args = append(args, className)
-		}
-
-		if groupName != "" {
-			query += " AND g.name = ?"
-			args = append(args, groupName)
-		}
-
-		rows, err := dbConn.Query(query, args...)
+		rows, err := store.GetExercisesForDeletion(ctx, sqlc.GetExercisesForDeletionParams{
+			Name:   exerciseName,
+			Name_2: className,
+			Name_3: groupName,
+		})
 		if err != nil {
 			fmt.Printf("%v Database query failed (will try API): %v\n",
 				messageUtils.WarningMsg("Warning"), err)
-		} else {
-			defer func() {
-				if err := rows.Err(); err != nil {
-					fmt.Printf("failed to iterate over rows: %v", err)
-				}
-			}()
-
+		} else if len(rows) > 0 {
 			validProjects := make(map[string]struct{})
-			var scanErrors []error
-
-			for rows.Next() {
-				var projectUUID, name, dbClassName, dbGroupName string
-				if err := rows.Scan(&projectUUID, &name, &dbClassName, &dbGroupName); err != nil {
-					scanErrors = append(scanErrors, fmt.Errorf("failed to scan project: %w", err))
-					continue
-				}
-
-				validProjects[projectUUID] = struct{}{}
+			for _, row := range rows {
+				validProjects[row.ProjectUuid] = struct{}{}
 			}
 
-			for _, scanErr := range scanErrors {
-				fmt.Printf("%v %v\n", messageUtils.WarningMsg("Warning"), scanErr)
+			projectsBody, status, err := utils.CallClient(cfg, "getProjects", []string{}, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get projects from API: %w", err)
+			}
+			if status != 200 {
+				return nil, fmt.Errorf("unexpected status code %d when getting projects", status)
 			}
 
-			if len(validProjects) > 0 {
-				projectsBody, status, err := utils.CallClient(cfg, "getProjects", []string{}, nil)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get projects from API: %w", err)
-				}
-				if status != 200 {
-					return nil, fmt.Errorf("unexpected status code %d when getting projects", status)
-				}
+			var allProjects []schemas.ProjectResponse
+			if err := json.Unmarshal(projectsBody, &allProjects); err != nil {
+				return nil, fmt.Errorf("failed to parse projects response: %w", err)
+			}
 
-				var allProjects []schemas.ProjectResponse
-				if err := json.Unmarshal(projectsBody, &allProjects); err != nil {
-					return nil, fmt.Errorf("failed to parse projects response: %w", err)
-				}
-
-				var matchingProjects []schemas.ProjectResponse
-				for _, project := range allProjects {
-					for shortUUID := range validProjects {
-						if strings.Contains(project.Name, shortUUID) {
-							matchingProjects = append(matchingProjects, project)
-							break
-						}
+			var matchingProjects []schemas.ProjectResponse
+			for _, project := range allProjects {
+				for shortUUID := range validProjects {
+					if strings.Contains(project.Name, shortUUID) {
+						matchingProjects = append(matchingProjects, project)
+						break
 					}
 				}
+			}
 
-				if len(matchingProjects) > 0 {
-					fmt.Printf("%v Found %d projects in database for exercise %s\n",
-						messageUtils.InfoMsg("Info"),
-						len(matchingProjects), messageUtils.Bold(exerciseName))
-					return matchingProjects, nil
-				}
+			if len(matchingProjects) > 0 {
+				fmt.Printf("%v Found %d projects in database for exercise %s\n",
+					messageUtils.InfoMsg("Info"),
+					len(matchingProjects), messageUtils.Bold(exerciseName))
+				return matchingProjects, nil
 			}
 		}
 	}
@@ -787,61 +839,52 @@ func getProjectsForExercise(cfg config.GlobalOptions, exerciseName, className, g
 }
 
 func DeleteAllExercisesForClass(cfg config.GlobalOptions, className string) error {
-	dbConn, err := db.InitIfNeeded()
+	ctx := context.Background()
+	store, err := db.Init()
 	if err != nil {
 		fmt.Printf("%v Failed to initialize database: %v\n",
 			messageUtils.WarningMsg("Warning"),
 			err)
-	} else {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				fmt.Printf("failed to close database connection: %v", err)
-			}
-		}()
 	}
 
 	clusterID, err := getClusterIDForServer(cfg)
-	var nodeServers []string
+	type nodeServer struct {
+		ID  int64
+		URL string
+	}
+
+	var nodeServers []nodeServer
 	if err == nil && clusterID != 0 {
-		nodes, nerr := db.GetNodes(dbConn)
+		nodes, nerr := store.GetNodes(ctx)
 		if nerr == nil {
 			for _, n := range nodes {
-				if n.ClusterID == clusterID {
-					nodeServers = append(nodeServers, fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port))
+				if n.ClusterID == int64(clusterID) {
+					nodeToAdd := nodeServer{
+						ID:  n.NodeID,
+						URL: fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port),
+					}
+					nodeServers = append(nodeServers, nodeToAdd)
 				}
 			}
 		}
 	}
 
 	if len(nodeServers) == 0 {
-		return deleteAllExercisesForClassOnNode(cfg, className)
+		return deleteAllExercisesForClassOnNode(cfg, className, ctx, 0)
 	}
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(nodeServers))
 	for _, srv := range nodeServers {
 		wg.Add(1)
-		go func(server string) {
+		go func(server nodeServer) {
 			defer wg.Done()
 			nodeCfg := cfg
-			nodeCfg.Server = server
-			if e := deleteAllExercisesForClassOnNode(nodeCfg, className); e != nil {
-				errCh <- fmt.Errorf("%s: %w", server, e)
+			nodeCfg.Server = server.URL
+			if e := deleteAllExercisesForClassOnNode(nodeCfg, className, ctx, srv.ID); e != nil {
+				errCh <- fmt.Errorf("%s: %w", server.URL, e)
 			}
 		}(srv)
-	}
-
-	if dbConn != nil {
-		if _, err := dbConn.Exec(`
-			DELETE FROM exercises 
-			WHERE class = ?`,
-			className); err != nil {
-			errCh <- fmt.Errorf("failed to delete exercises for class %s from database: %w", className, err)
-		} else {
-			fmt.Printf("%v Deleted database records for exercises in class %v\n",
-				messageUtils.SuccessMsg("Deleted database records"),
-				messageUtils.Bold(className))
-		}
 	}
 
 	wg.Wait()
@@ -854,33 +897,7 @@ func DeleteAllExercisesForClass(cfg config.GlobalOptions, className string) erro
 	return nil
 }
 
-func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string) error {
-	dbConn, err := db.InitIfNeeded()
-	if err == nil {
-		defer func() {
-			if err := dbConn.Close(); err != nil {
-				fmt.Printf("failed to close database connection: %v", err)
-			}
-		}()
-		_, err = dbConn.Exec(`
-			DELETE FROM exercises 
-			WHERE class = ?`,
-			className)
-		if err != nil {
-			fmt.Printf("%v Failed to delete exercises for class %s from database: %v\n",
-				messageUtils.WarningMsg("Warning"),
-				className, err)
-		} else {
-			fmt.Printf("%v Deleted database records for exercises in class %v\n",
-				messageUtils.SuccessMsg("Success"),
-				messageUtils.Bold(className))
-		}
-	} else {
-		fmt.Printf("%v Failed to initialize database: %v\n",
-			messageUtils.WarningMsg("Warning"),
-			err)
-	}
-
+func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string, ctx context.Context, nodeID int64) error {
 	projectsBody, status, err := utils.CallClient(cfg, "getProjects", []string{}, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get projects: %w", err)
@@ -942,6 +959,27 @@ func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string
 		} else {
 			deleted++
 		}
+	}
+
+	store, err := db.Init()
+	if err == nil && nodeID != 0 {
+		err = store.DeleteExerciseForClassOnNode(ctx, sqlc.DeleteExerciseForClassOnNodeParams{
+			NodeID: nodeID,
+			Name:   className,
+		})
+		if err != nil {
+			fmt.Printf("%v Failed to delete exercises for class %s from database: %v\n",
+				messageUtils.WarningMsg("Warning"),
+				className, err)
+		} else {
+			fmt.Printf("%v Deleted database records for exercises in class %v\n",
+				messageUtils.SuccessMsg("Success"),
+				messageUtils.Bold(className))
+		}
+	} else if err != nil {
+		fmt.Printf("%v Failed to initialize database: %v\n",
+			messageUtils.WarningMsg("Warning"),
+			err)
 	}
 
 	if deleted > 0 {
@@ -1262,42 +1300,24 @@ func getClusterIDForServer(cfg config.GlobalOptions) (int, error) {
 	urlObj := utils.ValidateUrlWithReturn(cfg.Server)
 	clusterName := fmt.Sprintf("%s%s", urlObj.Hostname(), "_single_node_cluster")
 
-	conn, err := db.InitIfNeeded()
+	ctx := context.Background()
+	store, err := db.Init()
 	if err != nil {
 		return 0, fmt.Errorf("failed to init db: %w", err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
 
-	clusters, err := db.GetClusters(conn)
+	clusters, err := store.GetClusters(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get clusters: %w", err)
 	}
 
 	for _, cluster := range clusters {
 		if cluster.Name == clusterName {
-			return cluster.Id, nil
+			return int(cluster.ClusterID), nil
 		}
 	}
 
 	return 0, fmt.Errorf("cluster not found")
-}
-
-func deleteClassFromDB(clusterID int, className string) error {
-	conn, err := db.InitIfNeeded()
-	if err != nil {
-		return fmt.Errorf("failed to init db: %w", err)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close database connection: %v", err)
-		}
-	}()
-
-	return db.DeleteClassFromDB(conn, clusterID, className)
 }
 
 func distributeGroupsWithMode(nodes []db.NodeDataAll, classData schemas.Class, respectCaps bool) ([]NodeAndGroups, error) {
@@ -1432,10 +1452,18 @@ func distributeGroupsWithMode(nodes []db.NodeDataAll, classData schemas.Class, r
 	return result, nil
 }
 
+func addUserToGroup(cfg config.GlobalOptions, userID, groupID string) error {
+	_, status, err := utils.CallClient(cfg, "addUserToGroup", []string{groupID, userID}, nil)
+	if err != nil {
+		return fmt.Errorf("failed to add user to group: %w", err)
+	}
+	if status != 200 && status != 201 && status != 204 {
+		return fmt.Errorf("failed to add user to group: status %d", status)
+	}
+	return nil
+}
+
 func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.NodeGroupsForClass) error {
-
-	// 1. create class group on all nodes
-
 	if len(plans) == 0 {
 		return nil
 	}
@@ -1445,8 +1473,8 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 	}
 
 	var wg sync.WaitGroup
-
 	errChan := make(chan error, len(plans))
+
 	for _, plan := range plans {
 		wg.Add(1)
 		go func(plan db.NodeGroupsForClass) {
@@ -1476,7 +1504,6 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 			fmt.Printf("%v Created class group %v\n",
 				messageUtils.SuccessMsg("Created class group"),
 				messageUtils.Bold(classGroupName))
-
 		}(plan)
 	}
 	wg.Wait()
@@ -1487,11 +1514,9 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 		}
 	}
 
-	// 2. create student groups on the nodes
-
 	var wg2 sync.WaitGroup
-
 	errchan2 := make(chan error, len(plans))
+
 	for _, plan := range plans {
 		wg2.Add(1)
 		go func(plan db.NodeGroupsForClass) {
@@ -1527,10 +1552,8 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 				fmt.Printf("%v Created student group %v\n",
 					messageUtils.SuccessMsg("Created student group"),
 					messageUtils.Bold(studentGroupName))
-
 			}
 		}(plan)
-
 	}
 	wg2.Wait()
 	close(errchan2)
@@ -1540,11 +1563,9 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 		}
 	}
 
-	// 3. create users and add them to groups concurrently
-
 	var wg3 sync.WaitGroup
-
 	errchan3 := make(chan error, len(plans))
+
 	for _, plan := range plans {
 		wg3.Add(1)
 		go func(plan db.NodeGroupsForClass) {
@@ -1552,7 +1573,6 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 			nodeCfg := cfg
 			nodeCfg.Server = plan.NodeURL
 
-			// Create users and add them to groups
 			for _, group := range plan.Groups {
 				for _, user := range group.Students {
 					userData := schemas.UserCreate{
@@ -1586,7 +1606,6 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 						messageUtils.SuccessMsg("Created user"),
 						messageUtils.Bold(username))
 
-					// Get group IDs for class and student groups
 					groupsBody, status, err := utils.CallClient(nodeCfg, "getGroups", []string{}, nil)
 					if err != nil {
 						errchan3 <- fmt.Errorf("failed to get groups: %w", err)
@@ -1604,12 +1623,12 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 					}
 
 					var classGroupID, studentGroupID string
-					for _, group := range groups {
-						switch group.Name {
+					for _, g := range groups {
+						switch g.Name {
 						case classData.Name:
-							classGroupID = group.UserGroupID.String()
+							classGroupID = g.UserGroupID.String()
 						case user.GroupName:
-							studentGroupID = group.UserGroupID.String()
+							studentGroupID = g.UserGroupID.String()
 						}
 					}
 

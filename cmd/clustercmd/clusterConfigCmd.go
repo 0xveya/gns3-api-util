@@ -9,13 +9,14 @@ func NewClusterConfigmdGroup() *cobra.Command {
 		Use:   "config",
 		Short: "cluster config operations",
 		Long:  `commands to manage your cluster config`,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
+			return nil
 		},
 	}
-	//check
 	clusterConfigCmd.AddCommand(NewEditConfigCmd())
 	clusterConfigCmd.AddCommand(NewSyncClusterConfigCmdGroup())
 	clusterConfigCmd.AddCommand(NewApplyConfigCmd())
+	clusterConfigCmd.AddCommand(NewPurgeClusterConfigCMD())
 	return clusterConfigCmd
 }

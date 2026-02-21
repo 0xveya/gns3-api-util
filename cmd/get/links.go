@@ -13,7 +13,7 @@ import (
 func NewGetLinksCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListAllCmdName + " [project-name/id]",
 		Short:   "Get the links within a project by name or id",
 		Long:    `Get the links within a project by name or id`,
@@ -36,23 +36,21 @@ func NewGetLinksCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
 				ids, err := fuzzy.FuzzyInfoIDs(params)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				projectLinks, err := utils.GetResourceWithContext(cfg, "getLinks", ids, "project", "Project:")
 				if err != nil {
-					fmt.Printf("Error getting links: %v\n", err)
-					return
+					return fmt.Errorf("error getting links: %w", err)
 				}
 
 				utils.PrintResourceWithContext(projectLinks, "Project:")
@@ -61,12 +59,12 @@ func NewGetLinksCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					id, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getLinks", []string{id})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project")
@@ -77,7 +75,7 @@ func NewGetLinksCmd() *cobra.Command {
 func NewGetLinkCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     utils.ListSingleElementCmdName + " [project-name/id] [link-name/id]",
 		Short:   "Get a link within a project by name or id",
 		Long:    `Get a link within a project by name or id`,
@@ -100,34 +98,30 @@ func NewGetLinkCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting links: %v\n", err)
-					return
+					return fmt.Errorf("error getting links: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var linkIDs []string
@@ -140,8 +134,7 @@ func NewGetLinkCmd() *cobra.Command {
 				})
 
 				if len(linkIDs) == 0 {
-					fmt.Println("No links found in selected project")
-					return
+					return fmt.Errorf("no links found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(linkIDs, multi)
@@ -155,12 +148,12 @@ func NewGetLinkCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getLink", []string{projectID, linkID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and link")
@@ -171,7 +164,7 @@ func NewGetLinkCmd() *cobra.Command {
 func NewGetLinkIfaceCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "iface [project-name/id] [link-name/id]",
 		Short:   "Get the interface of a link within a project by name or id for Cloud or NAT devices.",
 		Long:    `Return iface info for links to Cloud or NAT devices for a link in a project by id or name.`,
@@ -194,34 +187,30 @@ func NewGetLinkIfaceCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting links: %v\n", err)
-					return
+					return fmt.Errorf("error getting links: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var linkIDs []string
@@ -234,8 +223,7 @@ func NewGetLinkIfaceCmd() *cobra.Command {
 				})
 
 				if len(linkIDs) == 0 {
-					fmt.Println("No links found in selected project")
-					return
+					return fmt.Errorf("no links found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(linkIDs, multi)
@@ -249,12 +237,12 @@ func NewGetLinkIfaceCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getLinkIface", []string{projectID, linkID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and link")
@@ -265,7 +253,7 @@ func NewGetLinkIfaceCmd() *cobra.Command {
 func NewGetLinkFiltersCmd() *cobra.Command {
 	var useFuzzy bool
 	var multi bool
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "filters [project-name/id] [link-name/id]",
 		Short:   "Get the filters for a link within a project by name or id",
 		Long:    `Get the filters for a link within a project by name or id`,
@@ -288,34 +276,30 @@ func NewGetLinkFiltersCmd() *cobra.Command {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
-				fmt.Printf("failed to get global options: %v", err)
+				return fmt.Errorf("failed to get global options: %w", err)
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
 				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
 				if err != nil {
-					fmt.Println(err)
-					return
+					return err
 				}
 
 				if len(projectIDs) == 0 {
-					fmt.Println("No project selected")
-					return
+					return fmt.Errorf("no project selected")
 				}
 
 				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
 				if err != nil {
-					fmt.Printf("Error getting links: %v\n", err)
-					return
+					return fmt.Errorf("error getting links: %w", err)
 				}
 
 				result := gjson.ParseBytes(rawData)
 				if !result.IsArray() {
-					fmt.Println("Expected array response")
-					return
+					return fmt.Errorf("expected array response")
 				}
 
 				var linkIDs []string
@@ -328,8 +312,7 @@ func NewGetLinkFiltersCmd() *cobra.Command {
 				})
 
 				if len(linkIDs) == 0 {
-					fmt.Println("No links found in selected project")
-					return
+					return fmt.Errorf("no links found in selected project")
 				}
 
 				results := fuzzy.NewFuzzyFinder(linkIDs, multi)
@@ -343,12 +326,12 @@ func NewGetLinkFiltersCmd() *cobra.Command {
 				if !utils.IsValidUUIDv4(args[0]) {
 					projectID, err = utils.ResolveID(cfg, "project", args[0], nil)
 					if err != nil {
-						fmt.Println(err)
-						return
+						return err
 					}
 				}
 				utils.ExecuteAndPrint(cfg, "getLinkFilters", []string{projectID, linkID})
 			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&useFuzzy, "fuzzy", "f", false, "Use fuzzy search to find a project and link")
