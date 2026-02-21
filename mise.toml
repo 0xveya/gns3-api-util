@@ -55,3 +55,7 @@ run = "golangci-lint run -c .golangci.yml"
 [tasks.sqlc]
 description = "Generate SQL files"
 run = "sqlc generate"
+
+[tasks.release]
+description = "Create a production release"
+run = "goreleaser release --clean"
