@@ -120,7 +120,7 @@ func (m *LoadingModel) renderLoading() string {
 	sb.WriteString(messageUtils.Separator(strings.Repeat("─", 50)) + "\n\n")
 
 	spinner := spinnerStyle.Render(string(spinnerChars[m.spinner]))
-	sb.WriteString(fmt.Sprintf("%s %s\n\n", spinner, m.message))
+	fmt.Fprintf(&sb, "%s %s\n\n", spinner, m.message)
 
 	if len(m.steps) > 0 {
 		sb.WriteString(messageUtils.InfoMsg("Steps:\n"))
