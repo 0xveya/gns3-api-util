@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -60,14 +61,14 @@ var subcommandKeyMap = map[string]string{
 	"symbol":    "symbols",
 }
 
-func GetIDFieldMapping(resourceType string) (string, string, bool) {
+func GetIDFieldMapping(resourceType string) (idField, nameField string, ok bool) {
 	if fields, ok := idElementName[resourceType]; ok {
 		return fields[0], fields[1], true
 	}
 	return "", "", false
 }
 
-func CallClient(cfg config.GlobalOptions, cmdName string, args []string, body any) ([]byte, int, error) {
+func CallClient(cfg config.GlobalOptions, cmdName string, args []string, body any) (respBody []byte, statusCode int, err error) {
 	cmd, ok := commandMap[cmdName]
 	if !ok {
 		return nil, 0, fmt.Errorf("unknown command: %s", cmdName)
@@ -75,7 +76,6 @@ func CallClient(cfg config.GlobalOptions, cmdName string, args []string, body an
 
 	token := ""
 	if cmdName != "userAuthenticate" {
-		var err error
 		token, err = authentication.GetKeyForServer(cfg)
 		if err != nil {
 			return nil, 0, err
@@ -107,7 +107,8 @@ func CallClient(cfg config.GlobalOptions, cmdName string, args []string, body an
 		case []byte:
 			dataStr = string(v)
 		default:
-			b, err := json.Marshal(v)
+			var b []byte
+			b, err = json.Marshal(v)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to encode request body: %w", err)
 			}
@@ -316,7 +317,7 @@ func IsValidUUIDv4(s string) bool {
 	return err == nil && u.Version() == 4
 }
 
-func ResolveID(cfg config.GlobalOptions, subcommand string, name string, args []string) (string, error) {
+func ResolveID(cfg config.GlobalOptions, subcommand, name string, args []string) (string, error) {
 	titleCaser := cases.Title(language.Und)
 	key, ok := subcommandKeyMap[subcommand]
 	if !ok {
@@ -401,7 +402,7 @@ func GetResourceWithContext(cfg config.GlobalOptions, commandName string, resour
 				}
 
 				contextResult := gjson.ParseBytes(contextBody)
-				contextKey = getContextKey(contextResult, contextType)
+				contextKey = getContextKey(&contextResult, contextType)
 				if contextKey == "" {
 					contextKey = resourceID
 				}
@@ -471,7 +472,7 @@ func getContextCommand(resourceType string) string {
 	return contextCommands[resourceType]
 }
 
-func getContextKey(result gjson.Result, resourceType string) string {
+func getContextKey(result *gjson.Result, resourceType string) string {
 	if fields, ok := idElementName[resourceType]; ok {
 		nameField := fields[1]
 		return result.Get(nameField).String()
@@ -532,7 +533,7 @@ func ValidateUrlWithReturn(input string) *url.URL {
 	return u
 }
 
-func ValidateAndTestUrl(input string) bool {
+func ValidateAndTestUrl(ctx context.Context, input string) bool {
 	if !ValidateUrl(input) {
 		return false
 	}
@@ -543,7 +544,7 @@ func ValidateAndTestUrl(input string) bool {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, input, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, input, http.NoBody)
 	if err != nil {
 		return false
 	}

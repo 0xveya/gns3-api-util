@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/stefanistkuhl/gns3util/pkg/cluster/db/sqlc"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
@@ -21,21 +22,29 @@ type Store struct {
 	DB *sql.DB
 }
 
-func openDB(dbPath string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_foreign_keys=on&_busy_timeout=5000&_journal_mode=WAL", dbPath)
+func openDB(ctx context.Context, dbPath string) (*sql.DB, error) {
+	dsn := fmt.Sprintf("file:%s", dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+
+	setupQuery := `
+		PRAGMA journal_mode = WAL;
+		PRAGMA synchronous = NORMAL;
+		PRAGMA foreign_keys = ON;
+		PRAGMA busy_timeout = 5000;
+	`
+	if _, err := db.ExecContext(ctx, setupQuery); err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, fmt.Errorf("failed to apply sqlite pragmas: %w", err)
 	}
+
 	return db, nil
 }
 
@@ -49,13 +58,16 @@ func Init() (*Store, error) {
 	_, statErr := os.Stat(dbPath)
 	dbExists := !os.IsNotExist(statErr)
 
-	db, err := openDB(dbPath)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db, err := openDB(ctx, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 
 	if !dbExists {
-		if _, err := db.Exec(Schema); err != nil {
+		if _, err := db.ExecContext(ctx, Schema); err != nil {
 			_ = db.Close()
 			return nil, fmt.Errorf("apply initial schema: %w", err)
 		}
@@ -74,25 +86,11 @@ func (s *Store) ReadOnly(ctx context.Context, fn func(*sqlc.Queries) error) erro
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
 
-	qtx := s.WithTx(tx)
-
-	if err := fn(qtx); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
-func (s *Store) ReadOnlyTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
 	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			// Log the rollback error but don't override the original error
+			fmt.Printf("Warning: failed to rollback transaction: %v\n", rollbackErr)
 		}
 	}()
 

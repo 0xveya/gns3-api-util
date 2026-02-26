@@ -60,7 +60,7 @@ func NewGetTemplateCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getTemplates", "template_id", multi)
-				err := fuzzy.FuzzyInfo(params)
+				err = fuzzy.FuzzyInfo(params)
 				if err != nil {
 					return err
 				}

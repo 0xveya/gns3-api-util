@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 )
@@ -36,7 +37,7 @@ func LoadOrCreate(opts Options) (*DeviceKey, error) {
 }
 
 func Load(path string) (*DeviceKey, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,10 @@ func Load(path string) (*DeviceKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	pub := priv.Public().(ed25519.PublicKey)
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to get public key")
+	}
 	fp := Fingerprint(pub)
 	return &DeviceKey{
 		Priv:      priv,
@@ -67,7 +71,10 @@ func Create(path string) (*DeviceKey, error) {
 	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
 		return nil, err
 	}
-	pub := priv.Public().(ed25519.PublicKey)
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to get public key")
+	}
 	return &DeviceKey{
 		Priv:      priv,
 		Pub:       pub,

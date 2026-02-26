@@ -39,7 +39,7 @@ func LoadClassFromFile(filePath string) (schemas.Class, error) {
 		return classData, fmt.Errorf("file does not exist: %s", messageUtils.Bold(filePath))
 	}
 
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304
 	if err != nil {
 		return classData, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -47,7 +47,7 @@ func LoadClassFromFile(filePath string) (schemas.Class, error) {
 		_ = file.Close()
 	}()
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return classData, fmt.Errorf("failed to read file: %w", err)
 	}
@@ -148,12 +148,12 @@ func CreateClass(cfg config.GlobalOptions, clusterID int, classData schemas.Clas
 
 	groupIDs := make(map[string]int64)
 	for _, g := range classData.Groups {
-		groupID, err := qtx.CreateGroupReturning(ctx, sqlc.CreateGroupReturningParams{
+		groupID, createGroupErr := qtx.CreateGroupReturning(ctx, sqlc.CreateGroupReturningParams{
 			ClassID: classID,
 			Name:    g.Name,
 		})
-		if err != nil {
-			return false, fmt.Errorf("failed to create group %s: %w", g.Name, err)
+		if createGroupErr != nil {
+			return false, fmt.Errorf("failed to create group %s: %w", g.Name, createGroupErr)
 		}
 		groupIDs[g.Name] = groupID
 
@@ -162,14 +162,14 @@ func CreateClass(cfg config.GlobalOptions, clusterID int, classData schemas.Clas
 			if u.FullName != nil {
 				fullName = *u.FullName
 			}
-			_, err := qtx.CreateUserReturning(ctx, sqlc.CreateUserReturningParams{
+			_, createUserErr := qtx.CreateUserReturning(ctx, sqlc.CreateUserReturningParams{
 				GroupID:         groupID,
 				Username:        u.UserName,
 				FullName:        sql.NullString{String: fullName, Valid: fullName != ""},
 				DefaultPassword: u.Password,
 			})
-			if err != nil {
-				return false, fmt.Errorf("failed to create user %s: %w", u.UserName, err)
+			if createUserErr != nil {
+				return false, fmt.Errorf("failed to create user %s: %w", u.UserName, createUserErr)
 			}
 		}
 	}
@@ -199,19 +199,19 @@ func CreateClass(cfg config.GlobalOptions, clusterID int, classData schemas.Clas
 		end := offset + g.NumGroups
 		end = min(end, len(groupIDVals))
 		for _, gid := range groupIDVals[offset:end] {
-			err := qtx.AssignGroupToNode(ctx, sqlc.AssignGroupToNodeParams{
+			assignGroupErr := qtx.AssignGroupToNode(ctx, sqlc.AssignGroupToNodeParams{
 				NodeID:  int64(g.NodeID),
 				GroupID: gid,
 			})
-			if err != nil {
-				return false, fmt.Errorf("failed to assign group to node: %w", err)
+			if assignGroupErr != nil {
+				return false, fmt.Errorf("failed to assign group to node: %w", assignGroupErr)
 			}
 		}
 		offset = end
 	}
 
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("failed to commit transaction: %w", err)
+	if commitErr := tx.Commit(); commitErr != nil {
+		return false, fmt.Errorf("failed to commit transaction: %w", commitErr)
 	}
 
 	planRows, err := store.GetNodeGroupNamesForClass(ctx, sqlc.GetNodeGroupNamesForClassParams{
@@ -461,7 +461,8 @@ func deleteClassFromAPI(cfg config.GlobalOptions, className string) error {
 		len(studentGroups),
 		messageUtils.Bold(className))
 
-	allGroupsToDelete := append(studentGroups, classGroups...)
+	studentGroups = append(studentGroups, classGroups...)
+	allGroupsToDelete := studentGroups
 	allUsersToDelete := make(map[string]string)
 
 	for _, group := range allGroupsToDelete {
@@ -531,10 +532,7 @@ func deleteClassFromAPI(cfg config.GlobalOptions, className string) error {
 	return nil
 }
 
-func findClassAndStudentGroups(groups []schemas.UserGroupResponse, className string) ([]schemas.UserGroupResponse, []schemas.UserGroupResponse) {
-	var classGroups []schemas.UserGroupResponse
-	var studentGroups []schemas.UserGroupResponse
-
+func findClassAndStudentGroups(groups []schemas.UserGroupResponse, className string) (classGroups, studentGroups []schemas.UserGroupResponse) {
 	for _, group := range groups {
 		if group.Name == className {
 			classGroups = append(classGroups, group)
@@ -608,7 +606,8 @@ func DeleteExercise(cfg config.GlobalOptions, exerciseName, className, groupName
 		len(projects),
 		messageUtils.Bold(exerciseName))
 
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		projectID := project.ProjectID
 		projectName := project.Name
 
@@ -772,10 +771,11 @@ func getProjectsForExercise(cfg config.GlobalOptions, exerciseName, className, g
 			}
 
 			var matchingProjects []schemas.ProjectResponse
-			for _, project := range allProjects {
+			for i := range allProjects {
+				project := &allProjects[i]
 				for shortUUID := range validProjects {
 					if strings.Contains(project.Name, shortUUID) {
-						matchingProjects = append(matchingProjects, project)
+						matchingProjects = append(matchingProjects, *project)
 						break
 					}
 				}
@@ -810,7 +810,8 @@ func getProjectsForExercise(cfg config.GlobalOptions, exerciseName, className, g
 
 	var matchingProjects []schemas.ProjectResponse
 
-	for _, project := range allProjects {
+	for i := range allProjects {
+		project := &allProjects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) < 2 {
 			continue
@@ -828,7 +829,7 @@ func getProjectsForExercise(cfg config.GlobalOptions, exerciseName, className, g
 			continue
 		}
 
-		matchingProjects = append(matchingProjects, project)
+		matchingProjects = append(matchingProjects, *project)
 	}
 
 	fmt.Printf("%v Found %d matching projects in API\n",
@@ -907,14 +908,15 @@ func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string
 	}
 
 	var projects []schemas.ProjectResponse
-	if err := json.Unmarshal(projectsBody, &projects); err != nil {
-		return fmt.Errorf("failed to parse projects response: %w", err)
+	if jsonErr := json.Unmarshal(projectsBody, &projects); jsonErr != nil {
+		return fmt.Errorf("failed to parse projects response: %w", jsonErr)
 	}
 
 	var classExercises []string
 	seenExercises := make(map[string]bool)
 
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 2 && parts[0] == className {
 			exerciseName := parts[1]
@@ -940,9 +942,9 @@ func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string
 	deleted := 0
 	errorCount := 0
 	for _, exerciseName := range classExercises {
-		err := DeleteExercise(cfg, exerciseName, className, "")
-		if err != nil {
-			if errors.Is(err, ErrExerciseNotFound) {
+		deleteErr := DeleteExercise(cfg, exerciseName, className, "")
+		if deleteErr != nil {
+			if errors.Is(deleteErr, ErrExerciseNotFound) {
 				fmt.Printf("%v Exercise %v not present on %s; skipping.\n",
 					messageUtils.WarningMsg("Warning"),
 					messageUtils.Bold(exerciseName),
@@ -954,7 +956,7 @@ func deleteAllExercisesForClassOnNode(cfg config.GlobalOptions, className string
 				messageUtils.ErrorMsg("Error"),
 				messageUtils.Bold(exerciseName),
 				cfg.Server,
-				err)
+				deleteErr)
 			errorCount++
 		} else {
 			deleted++
@@ -1001,17 +1003,18 @@ func closeProject(cfg config.GlobalOptions, projectID string) error {
 	_, status, err := utils.CallClient(cfg, "closeProject", []string{projectID}, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "UUID") || strings.Contains(err.Error(), "uuid_parsing") {
-			projectsBody, _, err := utils.CallClient(cfg, "getProjects", []string{}, nil)
-			if err != nil {
-				return fmt.Errorf("failed to get projects: %w", err)
+			projectsBody, _, getProjErr := utils.CallClient(cfg, "getProjects", []string{}, nil)
+			if getProjErr != nil {
+				return fmt.Errorf("failed to get projects: %w", getProjErr)
 			}
 
 			var projects []schemas.ProjectResponse
-			if err := json.Unmarshal(projectsBody, &projects); err != nil {
-				return fmt.Errorf("failed to parse projects response: %w", err)
+			if jsonErr := json.Unmarshal(projectsBody, &projects); jsonErr != nil {
+				return fmt.Errorf("failed to parse projects response: %w", jsonErr)
 			}
 
-			for _, p := range projects {
+			for i := range projects {
+				p := &projects[i]
 				if p.Name == projectID {
 					_, status, err = utils.CallClient(cfg, "closeProject", []string{p.ProjectID}, nil)
 					if err != nil && status != 404 {
@@ -1141,12 +1144,12 @@ func listACLsForPool(cfg config.GlobalOptions, poolID, poolName string) ([]strin
 			}
 		}
 		if !match && trimmedName != "" {
-			if strings.Contains(pathLower, poolIDLower) || strings.Contains(pathLower, trimmedNameLower) || strings.Contains(pathLower, fmt.Sprintf("\"%s\"", trimmedNameLower)) {
+			if strings.Contains(pathLower, poolIDLower) || strings.Contains(pathLower, trimmedNameLower) || strings.Contains(pathLower, fmt.Sprintf("%q", trimmedNameLower)) {
 				match = true
 			}
 		}
 		if !match && trimmedName != "" {
-			resourceLabel := fmt.Sprintf("resource pool \"%s\"", trimmedNameLower)
+			resourceLabel := fmt.Sprintf("resource pool %q", trimmedNameLower)
 			if strings.Contains(pathLower, resourceLabel) {
 				match = true
 			}
@@ -1220,31 +1223,37 @@ func deleteProject(cfg config.GlobalOptions, projectID string) error {
 	_, status, err = utils.CallClient(cfg, "deleteProject", []string{projectID}, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "UUID") || strings.Contains(err.Error(), "uuid_parsing") {
-			projectsBody, _, err := utils.CallClient(cfg, "getProjects", []string{}, nil)
-			if err != nil {
-				return fmt.Errorf("failed to get projects: %w", err)
+			projectsBody, _, getProjErr := utils.CallClient(cfg, "getProjects", []string{}, nil)
+			if getProjErr != nil {
+				return fmt.Errorf("failed to get projects: %w", getProjErr)
 			}
 
 			var projects []schemas.ProjectResponse
-			if err := json.Unmarshal(projectsBody, &projects); err != nil {
-				return fmt.Errorf("failed to parse projects response: %w", err)
+			if jsonErr := json.Unmarshal(projectsBody, &projects); jsonErr != nil {
+				return fmt.Errorf("failed to parse projects response: %w", jsonErr)
 			}
 
-			for _, p := range projects {
-				if p.Name == projectID {
-					_, status, err = utils.CallClient(cfg, "closeProject", []string{p.ProjectID}, nil)
-					if err != nil && status != 404 {
-						return fmt.Errorf("failed to close project %s: %w", p.ProjectID, err)
-					}
-
-					_, _, err = utils.CallClient(cfg, "deleteProject", []string{p.ProjectID}, nil)
-					if err != nil {
-						return fmt.Errorf("failed to delete project %s: %w", p.ProjectID, err)
-					}
-					return nil
+			found := false
+			for i := range projects {
+				p := &projects[i]
+				if p.Name != projectID {
+					continue
 				}
+				_, status, err = utils.CallClient(cfg, "closeProject", []string{p.ProjectID}, nil)
+				if err != nil && status != 404 {
+					return fmt.Errorf("failed to close project %s: %w", p.ProjectID, err)
+				}
+
+				_, _, err = utils.CallClient(cfg, "deleteProject", []string{p.ProjectID}, nil)
+				if err != nil {
+					return fmt.Errorf("failed to delete project %s: %w", p.ProjectID, err)
+				}
+				found = true
+				break
 			}
-			return fmt.Errorf("project with name '%s' not found", projectID)
+			if !found {
+				return fmt.Errorf("project with name '%s' not found", projectID)
+			}
 		}
 		return fmt.Errorf("failed to delete project: %w", err)
 	}
@@ -1594,8 +1603,8 @@ func runPlans(cfg config.GlobalOptions, classData schemas.Class, plans []db.Node
 					}
 
 					var userResponse schemas.UserResponse
-					if err := json.Unmarshal(userBody, &userResponse); err != nil {
-						errchan3 <- fmt.Errorf("failed to parse user response: %w", err)
+					if unmarshallErr := json.Unmarshal(userBody, &userResponse); unmarshallErr != nil {
+						errchan3 <- fmt.Errorf("failed to parse user response: %w", unmarshallErr)
 						return
 					}
 

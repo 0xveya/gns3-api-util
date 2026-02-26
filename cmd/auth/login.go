@@ -45,9 +45,9 @@ func NewAuthLoginCmd() *cobra.Command {
 			}
 
 			if username == "" || password == "" {
-				interactiveUsername, interactivePassword, err := utils.GetLoginCredentials()
-				if err != nil {
-					return err
+				interactiveUsername, interactivePassword, credErr := utils.GetLoginCredentials()
+				if credErr != nil {
+					return credErr
 				}
 
 				if username == "" {
@@ -73,8 +73,8 @@ func NewAuthLoginCmd() *cobra.Command {
 			}
 
 			var payload map[string]any
-			if err := json.Unmarshal(data, &payload); err != nil {
-				return fmt.Errorf("failed to prepare payload: %w", err)
+			if unmarshalErr := json.Unmarshal(data, &payload); unmarshalErr != nil {
+				return fmt.Errorf("failed to prepare payload: %w", unmarshalErr)
 			}
 			body, status, err := utils.CallClient(cfg, "userAuthenticate", []string{}, payload)
 			if err != nil {

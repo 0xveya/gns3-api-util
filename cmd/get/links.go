@@ -43,14 +43,14 @@ func NewGetLinksCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				projectLinks, err := utils.GetResourceWithContext(cfg, "getLinks", ids, "project", "Project:")
-				if err != nil {
-					return fmt.Errorf("error getting links: %w", err)
+				projectLinks, projectErr := utils.GetResourceWithContext(cfg, "getLinks", ids, "project", "Project:")
+				if projectErr != nil {
+					return fmt.Errorf("error getting links: %w", projectErr)
 				}
 
 				utils.PrintResourceWithContext(projectLinks, "Project:")
@@ -105,18 +105,18 @@ func NewGetLinkCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting links: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting links: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)
@@ -194,18 +194,18 @@ func NewGetLinkIfaceCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting links: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting links: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)
@@ -283,18 +283,18 @@ func NewGetLinkFiltersCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting links: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getLinks", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting links: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)

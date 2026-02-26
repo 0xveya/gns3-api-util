@@ -43,14 +43,14 @@ func NewGetNodesCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				projectNodes, err := utils.GetResourceWithContext(cfg, "getNodes", ids, "project", "Project:")
-				if err != nil {
-					return fmt.Errorf("error getting nodes: %w", err)
+				projectNodes, projectErr := utils.GetResourceWithContext(cfg, "getNodes", ids, "project", "Project:")
+				if projectErr != nil {
+					return fmt.Errorf("error getting nodes: %w", projectErr)
 				}
 
 				utils.PrintResourceWithContext(projectNodes, "Project:")
@@ -105,18 +105,18 @@ func NewGetNodeCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting nodes: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting nodes: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)
@@ -200,18 +200,18 @@ func NewGetNodeLinksCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting nodes: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting nodes: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)
@@ -295,18 +295,18 @@ func NewGetNodesAutoIdlePCCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting nodes: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting nodes: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)
@@ -390,18 +390,18 @@ func NewGetNodesAutoIdlePCProposalsCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				projectParams := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", false, "project", "Project:")
-				projectIDs, err := fuzzy.FuzzyInfoIDs(projectParams)
-				if err != nil {
-					return err
+				projectIDs, fuzzyErr := fuzzy.FuzzyInfoIDs(projectParams)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
 				if len(projectIDs) == 0 {
 					return fmt.Errorf("no project selected")
 				}
 
-				rawData, _, err := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
-				if err != nil {
-					return fmt.Errorf("error getting nodes: %w", err)
+				rawData, _, apiErr := utils.CallClient(cfg, "getNodes", []string{projectIDs[0]}, nil)
+				if apiErr != nil {
+					return fmt.Errorf("error getting nodes: %w", apiErr)
 				}
 
 				result := gjson.ParseBytes(rawData)

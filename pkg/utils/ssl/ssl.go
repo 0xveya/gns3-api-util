@@ -63,14 +63,14 @@ func NewStateManager() (*StateManager, error) {
 	}
 
 	stateDir := filepath.Join(homeDir, ".gns3")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	return &StateManager{StateDir: stateDir}, nil
 }
 
-func (sm *StateManager) SaveState(serverHost string, state ServerState) error {
+func (sm *StateManager) SaveState(serverHost string, state *ServerState) error {
 	stateFile := filepath.Join(sm.StateDir, fmt.Sprintf("server_%s.json", serverHost))
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -78,7 +78,7 @@ func (sm *StateManager) SaveState(serverHost string, state ServerState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(stateFile, data, 0o644); err != nil {
+	if err := os.WriteFile(stateFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -88,7 +88,7 @@ func (sm *StateManager) SaveState(serverHost string, state ServerState) error {
 func (sm *StateManager) LoadState(serverHost string) (*ServerState, error) {
 	stateFile := filepath.Join(sm.StateDir, fmt.Sprintf("server_%s.json", serverHost))
 
-	data, err := os.ReadFile(stateFile)
+	data, err := os.ReadFile(stateFile) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("no state found for server %s", serverHost)
@@ -122,7 +122,7 @@ func (sm *StateManager) ListStates() ([]ServerState, error) {
 
 	var states []ServerState
 	for _, file := range files {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(file) // #nosec G304
 		if err != nil {
 			continue
 		}
@@ -138,7 +138,7 @@ func (sm *StateManager) ListStates() ([]ServerState, error) {
 	return states, nil
 }
 
-func ValidateInstallSSLInput(args InstallSSLArgs) error {
+func ValidateInstallSSLInput(args *InstallSSLArgs) error {
 	if args.FirewallBlock && args.FirewallAllow != "" {
 		return fmt.Errorf("cannot both block all connections and allow specific subnet")
 	}
@@ -168,7 +168,7 @@ func ValidateInstallSSLInput(args InstallSSLArgs) error {
 	return nil
 }
 
-func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
+func ParseServerURLForSSH(serverURL string, portOption int) (hostname string, port int) {
 	cleanURL := serverURL
 	if result, found := strings.CutPrefix(serverURL, "http://"); found {
 		cleanURL = result
@@ -178,7 +178,7 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 	// Parse the URL to extract hostname and port
 	parsedURL, err := url.Parse("http://" + cleanURL)
 	if err != nil {
-		hostname, port := splitHostPort(cleanURL)
+		hostname, port = splitHostPort(cleanURL)
 		if portOption > 0 {
 			return hostname, portOption
 		}
@@ -188,8 +188,8 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 		return hostname, 22
 	}
 
-	hostname := parsedURL.Hostname()
-	port := 22
+	hostname = parsedURL.Hostname()
+	port = 22
 
 	if portOption > 0 {
 		port = portOption
@@ -202,7 +202,7 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 	return hostname, port
 }
 
-func splitHostPort(hostPort string) (string, int) {
+func splitHostPort(hostPort string) (host string, port int) {
 	parts := strings.Split(hostPort, ":")
 	if len(parts) == 2 {
 		if port, err := strconv.Atoi(parts[1]); err == nil {
@@ -212,7 +212,7 @@ func splitHostPort(hostPort string) (string, int) {
 	return hostPort, 0
 }
 
-func EditScriptWithFlags(script string, args InstallSSLArgs) string {
+func EditScriptWithFlags(script string, args *InstallSSLArgs) string {
 	lines := strings.Split(script, "\n")
 
 	for i, line := range lines {
@@ -236,18 +236,19 @@ func EditScriptWithFlags(script string, args InstallSSLArgs) string {
 		// Replace DOMAIN="" with actual domain if provided
 		if strings.Contains(line, `DOMAIN=""`) {
 			if args.Domain != "" {
-				lines[i] = strings.Replace(line, `DOMAIN=""`, fmt.Sprintf(`DOMAIN="%s"`, args.Domain), 1)
+				lines[i] = strings.Replace(line, `DOMAIN=""`, fmt.Sprintf(`DOMAIN=%q`, args.Domain), 1)
 			}
 		}
 
 		// Replace SUBJ="" with actual subject
 		if strings.Contains(line, `SUBJ=""`) {
-			lines[i] = strings.Replace(line, `SUBJ=""`, fmt.Sprintf(`SUBJ="%s"`, args.Subject), 1)
+			lines[i] = strings.Replace(line, `SUBJ=""`, fmt.Sprintf(`SUBJ=%q`, args.Subject), 1)
 		}
 
 		// Handle UFW_ENABLE replacement based on firewall settings
 		if strings.Contains(line, "UFW_ENABLE") {
-			if args.FirewallBlock {
+			switch {
+			case args.FirewallBlock:
 				// Block all external access to GNS3 port, only allow localhost for reverse proxy
 				firewallRules := []string{
 					"# Ensure SSH access is preserved",
@@ -263,7 +264,7 @@ func EditScriptWithFlags(script string, args InstallSSLArgs) string {
 					fmt.Sprintf("echo \"Only localhost can access port %d (for reverse proxy)\"", args.GNS3Port),
 				}
 				lines[i] = strings.Join(firewallRules, "\n")
-			} else if args.FirewallAllow != "" {
+			case args.FirewallAllow != "":
 				// Allow specific subnet to GNS3 port and block others from GNS3 port only
 				// First ensure SSH is allowed, then configure GNS3 port rules
 				firewallRules := []string{
@@ -277,7 +278,7 @@ func EditScriptWithFlags(script string, args InstallSSLArgs) string {
 					fmt.Sprintf("echo \"Port %d allowed for subnet %s, blocked for others\"", args.GNS3Port, args.FirewallAllow),
 				}
 				lines[i] = strings.Join(firewallRules, "\n")
-			} else {
+			default:
 				// No firewall rules
 				lines[i] = "# No firewall rules configured"
 			}
@@ -345,7 +346,7 @@ func GetUninstallScript() string {
 	return uninstallHTTPSScript
 }
 
-func EditUninstallScriptWithFlags(script string, args InstallSSLArgs) string {
+func EditUninstallScriptWithFlags(script string, args *InstallSSLArgs) string {
 	lines := strings.Split(script, "\n")
 
 	for i, line := range lines {
@@ -367,7 +368,7 @@ func EditUninstallScriptWithFlags(script string, args InstallSSLArgs) string {
 
 		if strings.Contains(line, "DOMAIN=\"\"") {
 			if args.Domain != "" {
-				lines[i] = fmt.Sprintf("DOMAIN=\"%s\"", args.Domain)
+				lines[i] = fmt.Sprintf("DOMAIN=%q", args.Domain)
 			} else {
 				lines[i] = "DOMAIN=\"\""
 			}
@@ -375,7 +376,7 @@ func EditUninstallScriptWithFlags(script string, args InstallSSLArgs) string {
 
 		if strings.Contains(line, "FIREWALL_ALLOW=\"\"") {
 			if args.FirewallAllow != "" {
-				lines[i] = fmt.Sprintf("FIREWALL_ALLOW=\"%s\"", args.FirewallAllow)
+				lines[i] = fmt.Sprintf("FIREWALL_ALLOW=%q", args.FirewallAllow)
 			} else {
 				lines[i] = "FIREWALL_ALLOW=\"\""
 			}

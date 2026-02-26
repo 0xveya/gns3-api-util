@@ -46,7 +46,10 @@ func NewAddNodeCmd() *cobra.Command {
 			if err == nil {
 				usesID = true
 			}
-			store, err := db.Init()
+			store, storeErr := db.Init()
+			if storeErr != nil {
+				return fmt.Errorf(" failed to open database connection %w", storeErr)
+			}
 			ctx := context.Background()
 			clusters, err := store.GetClusters(ctx)
 			if err != nil {
@@ -119,9 +122,9 @@ func NewAddNodeCmd() *cobra.Command {
 					MaxGroups: maxGroups,
 					AuthUser:  node.User,
 				}
-				nodeDat, err := qtx.InsertNodeIntoCluster(ctx, nodeData)
-				if err != nil {
-					return fmt.Errorf("failed to insert node: %w", err)
+				nodeDat, insertErr := qtx.InsertNodeIntoCluster(ctx, nodeData)
+				if insertErr != nil {
+					return fmt.Errorf("failed to insert node: %w", insertErr)
 				}
 				insertedNodes = append(insertedNodes, nodeDat)
 			}
@@ -186,7 +189,10 @@ func NewAddNodesCmd() *cobra.Command {
 			if err == nil {
 				usesID = true
 			}
-			store, err := db.Init()
+			store, storeErr := db.Init()
+			if storeErr != nil {
+				return fmt.Errorf(" failed to open database connection %w", storeErr)
+			}
 			ctx := context.Background()
 			clusters, err := store.GetClusters(ctx)
 			if err != nil {
@@ -258,9 +264,9 @@ func NewAddNodesCmd() *cobra.Command {
 					MaxGroups: maxGroups,
 					AuthUser:  node.User,
 				}
-				nodeDat, err := qtx.InsertNodeIntoCluster(ctx, nodeData)
-				if err != nil {
-					return fmt.Errorf("failed to insert node: %w", err)
+				nodeDat, insertErr := qtx.InsertNodeIntoCluster(ctx, nodeData)
+				if insertErr != nil {
+					return fmt.Errorf("failed to insert node: %w", insertErr)
 				}
 				insertedNodes = append(insertedNodes, nodeDat)
 			}

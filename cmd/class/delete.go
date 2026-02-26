@@ -103,17 +103,20 @@ func runDeleteClass(cmd *cobra.Command, args []string) error {
 		targetClassName = className
 	}
 
-	if targetClassName != "" {
-		if clusterName != "" {
+	switch {
+	case targetClassName != "":
+		switch {
+		case clusterName != "":
 			if err := deleteClassInCluster(cfg, clusterName, targetClassName, confirm, deleteExercises); err != nil {
 				return fmt.Errorf("failed to delete class: %w", err)
 			}
 			return nil
+		default:
+			if err := deleteClassWithConfirmation(cfg, targetClassName, confirm, deleteExercises); err != nil {
+				return fmt.Errorf("failed to delete class: %w", err)
+			}
 		}
-		if err := deleteClassWithConfirmation(cfg, targetClassName, confirm, deleteExercises); err != nil {
-			return fmt.Errorf("failed to delete class: %w", err)
-		}
-	} else if deleteAll {
+	case deleteAll:
 		var classNames []string
 		var err error
 		if clusterName != "" {
@@ -156,7 +159,7 @@ func runDeleteClass(cmd *cobra.Command, args []string) error {
 					derr)
 			}
 		}
-	} else {
+	default:
 		var classNames []string
 		var err error
 		if clusterName != "" {
@@ -192,7 +195,7 @@ func runDeleteClass(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className string, confirm bool, deleteExercises bool) error {
+func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className string, confirm, deleteExercises bool) error {
 	if confirm {
 		message := fmt.Sprintf("Delete class '%s' from cluster '%s'?", className, clusterName)
 		if deleteExercises {
@@ -256,11 +259,11 @@ func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className strin
 			classID = c.ClassID
 		}
 	}
-	if err := qtx.DeleteClass(ctx, classID); err != nil {
+	if deleteErr := qtx.DeleteClass(ctx, classID); deleteErr != nil {
 		fmt.Printf("%v Warning: failed to delete class %v from database: %v\n",
-			fmt.Errorf("Warning: failed to delete class %s from database", className),
+			fmt.Errorf("warning: failed to delete class %s from database", className),
 			messageUtils.Bold(className),
-			err)
+			deleteErr)
 	}
 
 	for _, n := range nodes {
@@ -271,15 +274,15 @@ func deleteClassInCluster(cfg config.GlobalOptions, clusterName, className strin
 		nodeCfg.Server = fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
 
 		if deleteExercises {
-			if err := class.DeleteAllExercisesForClass(nodeCfg, className); err != nil {
+			if delExErr := class.DeleteAllExercisesForClass(nodeCfg, className); delExErr != nil {
 				fmt.Printf("%v failed to delete exercises for class %v on %s: %v\n",
-					messageUtils.WarningMsg("Warning"), messageUtils.Bold(className), nodeCfg.Server, err)
+					messageUtils.WarningMsg("Warning"), messageUtils.Bold(className), nodeCfg.Server, delExErr)
 			}
 		}
 
-		if err := class.DeleteClass(nodeCfg, className); err != nil {
+		if delClassErr := class.DeleteClass(nodeCfg, className); delClassErr != nil {
 			fmt.Printf("%v Failed to delete class %v on %s: %v\n",
-				messageUtils.ErrorMsg("Failed to delete class"), messageUtils.Bold(className), nodeCfg.Server, err)
+				messageUtils.ErrorMsg("Failed to delete class"), messageUtils.Bold(className), nodeCfg.Server, delClassErr)
 		} else {
 			fmt.Printf("%v Deleted class %v on %s\n",
 				messageUtils.SuccessMsg("Deleted class"), messageUtils.Bold(className), nodeCfg.Server)
@@ -344,7 +347,7 @@ func getAllClassNamesFromAPI(cfg config.GlobalOptions) ([]string, error) {
 	return getClassNamesFromGroups(groups)
 }
 
-func selectClassesWithFuzzy(cfg config.GlobalOptions, multi bool, dbFirst bool) ([]string, error) {
+func selectClassesWithFuzzy(cfg config.GlobalOptions, multi, dbFirst bool) ([]string, error) {
 	if dbFirst {
 		classNames, err := getAllClassNamesFromDB(cfg)
 		if err == nil && len(classNames) > 0 {
@@ -366,8 +369,8 @@ func selectClassesWithFuzzyFromAPI(cfg config.GlobalOptions, multi bool) ([]stri
 	}
 
 	var groups []schemas.UserGroupResponse
-	if err := json.Unmarshal(groupsBody, &groups); err != nil {
-		return nil, fmt.Errorf("failed to parse groups response: %w", err)
+	if unmarshalErr := json.Unmarshal(groupsBody, &groups); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse groups response: %w", unmarshalErr)
 	}
 
 	classNames, err := getClassNamesFromGroups(groups)
@@ -433,7 +436,7 @@ func getClassNamesFromGroups(groups []schemas.UserGroupResponse) ([]string, erro
 	return classNames, nil
 }
 
-func deleteClassWithConfirmation(cfg config.GlobalOptions, className string, confirm bool, deleteExercises bool) error {
+func deleteClassWithConfirmation(cfg config.GlobalOptions, className string, confirm, deleteExercises bool) error {
 	if confirm {
 		message := fmt.Sprintf("Delete class '%s'?", className)
 		if deleteExercises {

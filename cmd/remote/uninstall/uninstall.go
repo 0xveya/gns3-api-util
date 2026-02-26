@@ -14,7 +14,6 @@ import (
 	"github.com/stefanistkuhl/gns3util/pkg/utils/ssl"
 )
 
-// NewUninstallCmdGroup creates the uninstall command group
 func NewUninstallCmdGroup() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -29,7 +28,6 @@ func NewUninstallCmdGroup() *cobra.Command {
 	return cmd
 }
 
-// NewUninstallHTTPSCmd creates the uninstall https command
 func NewUninstallHTTPSCmd() *cobra.Command {
 	var (
 		port             int
@@ -62,57 +60,49 @@ If a state file is found from a previous installation, all configuration values
 will be automatically loaded and command line flags will be ignored.`,
 		Args: cobra.ExactArgs(1),
 		PreRun: func(cmd *cobra.Command, args []string) {
-			// Interactive mode
 			if interactive {
-				// Prompt user for each option
 				fmt.Println("=== Interactive SSL Uninstallation Setup ===")
 				fmt.Println("Press Enter to use default values (shown in brackets)")
 				fmt.Println()
 
-				// Prompt for reverse proxy port
 				fmt.Printf("Reverse proxy port to uninstall [%d]: ", reverseProxyPort)
 				var input string
 				_, _ = fmt.Scanln(&input)
 				if input != "" {
-					if port, err := strconv.Atoi(input); err == nil {
-						reverseProxyPort = port
+					if p, err := strconv.Atoi(input); err == nil {
+						reverseProxyPort = p
 					}
 				}
 
-				// Prompt for GNS3 port
 				fmt.Printf("GNS3 server port [%d]: ", gns3Port)
 				_, _ = fmt.Scanln(&input)
 				if input != "" {
-					if port, err := strconv.Atoi(input); err == nil {
-						gns3Port = port
+					if p, err := strconv.Atoi(input); err == nil {
+						gns3Port = p
 					}
 				}
 
-				// Prompt for domain
 				fmt.Printf("Domain that was used (leave empty if none) [%s]: ", domain)
 				_, _ = fmt.Scanln(&input)
 				if input != "" {
 					domain = input
 				}
 
-				// Prompt for subject
 				fmt.Printf("SSL certificate subject that was used [%s]: ", subject)
 				_, _ = fmt.Scanln(&input)
 				if input != "" {
 					subject = input
 				}
 
-				// Prompt for firewall allow
 				fmt.Printf("Firewall allow subnet that was used (leave empty if none) [%s]: ", firewallAllow)
 				_, _ = fmt.Scanln(&input)
 				if input != "" {
 					firewallAllow = input
 				}
 
-				// Prompt for firewall block
 				fmt.Printf("Were firewall rules configured? (y/N): ")
 				_, _ = fmt.Scanln(&input)
-				firewallBlock = strings.ToLower(input) == "y" || strings.ToLower(input) == "yes"
+				firewallBlock = strings.EqualFold(input, "y") || strings.EqualFold(input, "yes")
 
 				fmt.Println()
 				fmt.Println("=== Uninstallation Configuration Summary ===")
@@ -133,20 +123,17 @@ will be automatically loaded and command line flags will be ignored.`,
 				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
-			// Parse server URL for SSH connection
 			hostname, sshPort := ssl.ParseServerURLForSSH(cfg.Server, port)
 
-			// Try to load state from local machine first
 			stateManager, err := ssl.NewStateManager()
 			var state *ssl.ServerState
 			if err == nil {
-				if localState, err := stateManager.LoadState(hostname); err == nil {
+				if localState, stateErr := stateManager.LoadState(hostname); stateErr == nil {
 					state = localState
 					fmt.Printf("%s Loaded state from local machine\n", messageUtils.SuccessMsg("Loaded state from local machine"))
 				}
 			}
 
-			// Create SSL uninstall arguments (use state if available, otherwise use flags)
 			sslArgs := ssl.InstallSSLArgs{
 				FirewallAllow:    firewallAllow,
 				FirewallBlock:    firewallBlock,
@@ -157,35 +144,30 @@ will be automatically loaded and command line flags will be ignored.`,
 				Verbose:          verbose,
 			}
 
-			// Override with state values if available
 			if state != nil {
 				sslArgs.FirewallAllow = state.FirewallAllow
 				sslArgs.FirewallBlock = state.FirewallBlock
 				sslArgs.ReverseProxyPort = state.ReverseProxyPort
 				sslArgs.Domain = state.Domain
 				sslArgs.GNS3Port = state.GNS3Port
-				sslArgs.Subject = "/CN=localhost" // Default subject
+				sslArgs.Subject = "/CN=localhost"
 				fmt.Printf("%s Using saved configuration: RP=%d, GNS3=%d, Firewall=%t\n",
 					messageUtils.InfoMsg("Using saved configuration"), state.ReverseProxyPort, state.GNS3Port, state.FirewallBlock)
 			} else {
-				// If no state found, show warning and use default values
 				fmt.Printf("%s No state found, using command line flags or defaults\n", messageUtils.WarningMsg("No state found"))
 				if sslArgs.ReverseProxyPort == 443 && sslArgs.GNS3Port == 3080 && !sslArgs.FirewallBlock {
 					fmt.Printf("%s Using default values: RP=443, GNS3=3080, Firewall=false\n", messageUtils.InfoMsg("Using default values"))
 				}
 			}
 
-			// Validate arguments
-			if err := ssl.ValidateInstallSSLInput(sslArgs); err != nil {
-				return fmt.Errorf("validation error: %w", err)
+			if validationErr := ssl.ValidateInstallSSLInput(&sslArgs); validationErr != nil {
+				return fmt.Errorf("validation error: %w", validationErr)
 			}
 
-			// Show uninstall header
 			fmt.Printf("%s %s\n", messageUtils.Bold("🗑️"), messageUtils.Bold("GNS3 SSL Uninstallation"))
 			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
-			// Step 1: Connect via SSH
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, user, sshPort, privateKeyPath, verbose)
 			if err != nil {
@@ -198,20 +180,17 @@ will be automatically loaded and command line flags will be ignored.`,
 			}()
 			fmt.Printf("%s Connected successfully\n", messageUtils.SuccessMsg("Connected successfully"))
 
-			// Step 2: Check privileges
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
-			if err := sshClient.CheckPrivileges(); err != nil {
-				return fmt.Errorf("privilege check failed: %w", err)
+			if checkPrivErr := sshClient.CheckPrivileges(); checkPrivErr != nil {
+				return fmt.Errorf("privilege check failed: %w", checkPrivErr)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
-			// Step 3: Prepare uninstall script
 			fmt.Printf("%s Preparing SSL uninstall script...\n", messageUtils.InfoMsg("Preparing SSL uninstall script"))
 			script := ssl.GetUninstallScript()
-			editedScript := ssl.EditUninstallScriptWithFlags(script, sslArgs)
+			editedScript := ssl.EditUninstallScriptWithFlags(script, &sslArgs)
 			fmt.Printf("%s Script prepared\n", messageUtils.SuccessMsg("Script prepared"))
 
-			// Step 4: Execute uninstall
 			fmt.Printf("%s Uninstalling Caddy reverse proxy...\n", messageUtils.InfoMsg("Uninstalling Caddy reverse proxy"))
 			success, err := sshClient.ExecuteScript(editedScript, "/tmp/gns3_ssl_uninstall.sh")
 			if err != nil {
@@ -223,7 +202,6 @@ will be automatically loaded and command line flags will be ignored.`,
 			}
 			fmt.Printf("%s Uninstall completed\n", messageUtils.SuccessMsg("Uninstall completed"))
 
-			// Clean up local state
 			if stateManager != nil {
 				if err := stateManager.DeleteState(hostname); err != nil {
 					fmt.Printf("%s Warning: failed to delete local state: %v\n", messageUtils.WarningMsg("Warning: failed to delete local state"), err)
@@ -232,14 +210,12 @@ will be automatically loaded and command line flags will be ignored.`,
 				}
 			}
 
-			// Show success message
 			fmt.Printf("\n%s Successfully uninstalled Caddy reverse proxy\n", messageUtils.SuccessMsg("Successfully uninstalled Caddy reverse proxy"))
 			fmt.Printf("%s GNS3 server is now accessible on port %d\n", messageUtils.InfoMsg("GNS3 server is now accessible"), sslArgs.GNS3Port)
 			return nil
 		},
 	}
 
-	// Add flags
 	cmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port")
 	cmd.Flags().StringVarP(&privateKeyPath, "key", "", "", "Path to a custom SSH private key file")
 	cmd.Flags().IntVarP(&reverseProxyPort, "reverse-proxy-port", "r", 443, "Port for the reverse proxy that was used")
@@ -254,7 +230,6 @@ will be automatically loaded and command line flags will be ignored.`,
 	return cmd
 }
 
-// NewUninstallGNS3Cmd creates the uninstall gns3 command
 func NewUninstallGNS3Cmd() *cobra.Command {
 	var (
 		port           int
@@ -290,20 +265,17 @@ Note: This will NOT remove virtualization packages (QEMU, Docker, VirtualBox, et
 as they may be used by other applications.`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// Handle interactive mode
 			if interactive {
 				editedText, err := utils.EditTextWithEditor(gns3.UninstallInteractiveOptionsText, "txt")
 				if err != nil {
 					return fmt.Errorf("failed to edit options: %w", err)
 				}
 
-				// Parse the edited options
 				interactiveArgs, err := gns3.ParseInteractiveOptions(editedText)
 				if err != nil {
 					return fmt.Errorf("failed to parse interactive options: %w", err)
 				}
 
-				// Override the flag values with interactive values
 				homeDir = interactiveArgs.HomeDir
 				gns3Port = interactiveArgs.GNS3Port
 				verbose = interactiveArgs.Verbose
@@ -319,30 +291,26 @@ as they may be used by other applications.`,
 				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
-			// Parse server URL for SSH connection
 			hostname, sshPort := gns3.ParseServerURLForSSH(cfg.Server, port)
 
-			// Try to load state from local machine first
 			stateManager, err := gns3.NewStateManager()
 			var state *gns3.GNS3ServerState
 			if err == nil {
-				if localState, err := stateManager.LoadState(hostname); err == nil {
+				if localState, loadStateErr := stateManager.LoadState(hostname); loadStateErr == nil {
 					state = localState
 					fmt.Printf("%s Loaded state from local machine\n", messageUtils.SuccessMsg("Loaded state from local machine"))
 				}
 			}
 
-			// Create GNS3 uninstall arguments (use state if available, otherwise use flags)
 			gns3Args := gns3.InstallGNS3Args{
-				Username:     "gns3", // Default username, not configurable for uninstall
+				Username:     "gns3",
 				HomeDir:      homeDir,
-				ListenHost:   "0.0.0.0", // Default value, not validated for uninstall
+				ListenHost:   "0.0.0.0",
 				GNS3Port:     gns3Port,
 				Verbose:      verbose,
 				PreserveData: preserveData,
 			}
 
-			// Override with state values if available
 			if state != nil {
 				gns3Args.Username = state.Username
 				gns3Args.HomeDir = state.HomeDir
@@ -350,24 +318,20 @@ as they may be used by other applications.`,
 				fmt.Printf("%s Using saved configuration: User=%s, Home=%s, Port=%d\n",
 					messageUtils.InfoMsg("Using saved configuration"), state.Username, state.HomeDir, state.GNS3Port)
 			} else if !interactive {
-				// Only show warning if not in interactive mode
 				fmt.Printf("%s No state found, using command line flags or defaults\n", messageUtils.WarningMsg("No state found"))
 				if gns3Args.Username == "gns3" && gns3Args.HomeDir == "/opt/gns3" && gns3Args.GNS3Port == 3080 {
 					fmt.Printf("%s Using default values: User=gns3, Home=/opt/gns3, Port=3080\n", messageUtils.InfoMsg("Using default values"))
 				}
 			}
 
-			// Validate arguments
-			if err := gns3.ValidateUninstallGNS3Input(gns3Args); err != nil {
-				return fmt.Errorf("validation error: %w", err)
+			if validateErr := gns3.ValidateUninstallGNS3Input(&gns3Args); validateErr != nil {
+				return fmt.Errorf("validation error: %w", validateErr)
 			}
 
-			// Show uninstall header
 			fmt.Printf("%s %s\n", messageUtils.Bold("🗑️"), messageUtils.Bold("GNS3 Server Uninstallation"))
 			fmt.Printf("%s\n", messageUtils.Separator(strings.Repeat("─", 50)))
 			fmt.Println()
 
-			// Step 1: Connect via SSH
 			fmt.Printf("%s Connecting to remote server...\n", messageUtils.InfoMsg("Connecting to remote server"))
 			sshClient, err := ssh.ConnectWithKeyOrPassword(hostname, user, sshPort, privateKeyPath, verbose)
 			if err != nil {
@@ -380,20 +344,17 @@ as they may be used by other applications.`,
 			}()
 			fmt.Printf("%s Connected successfully\n", messageUtils.SuccessMsg("Connected successfully"))
 
-			// Step 2: Check privileges
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
-			if err := sshClient.CheckPrivileges(); err != nil {
-				return fmt.Errorf("privilege check failed: %w", err)
+			if checkPrivErr := sshClient.CheckPrivileges(); checkPrivErr != nil {
+				return fmt.Errorf("privilege check failed: %w", checkPrivErr)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
-			// Step 3: Prepare uninstall script
 			fmt.Printf("%s Preparing GNS3 uninstall script...\n", messageUtils.InfoMsg("Preparing GNS3 uninstall script"))
 			script := gns3.GetUninstallScript()
-			editedScript := gns3.EditUninstallScriptWithFlags(script, gns3Args)
+			editedScript := gns3.EditUninstallScriptWithFlags(script, &gns3Args)
 			fmt.Printf("%s Script prepared\n", messageUtils.SuccessMsg("Script prepared"))
 
-			// Step 4: Execute uninstall
 			fmt.Printf("%s Uninstalling GNS3 server...\n", messageUtils.InfoMsg("Uninstalling GNS3 server"))
 			success, err := sshClient.ExecuteScript(editedScript, "/tmp/gns3_uninstall.sh")
 			if err != nil {
@@ -405,7 +366,6 @@ as they may be used by other applications.`,
 			}
 			fmt.Printf("%s Uninstall completed\n", messageUtils.SuccessMsg("Uninstall completed"))
 
-			// Clean up local state
 			if stateManager != nil {
 				if err := stateManager.DeleteState(hostname); err != nil {
 					fmt.Printf("%s Warning: failed to delete local state: %v\n", messageUtils.WarningMsg("Warning: failed to delete local state"), err)
@@ -414,14 +374,12 @@ as they may be used by other applications.`,
 				}
 			}
 
-			// Show success message
 			fmt.Printf("\n%s GNS3 uninstallation completed successfully\n", messageUtils.SuccessMsg("GNS3 uninstallation completed successfully"))
 			fmt.Printf("%s If GNS3 was installed, it has been removed. If not found, no action was needed.\n", messageUtils.InfoMsg("If GNS3 was installed, it has been removed. If not found, no action was needed."))
 			return nil
 		},
 	}
 
-	// Add flags
 	cmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port")
 	cmd.Flags().StringVarP(&privateKeyPath, "key", "", "", "Path to a custom SSH private key file")
 	cmd.Flags().StringVarP(&homeDir, "home-dir", "", "/opt/gns3", "GNS3 home directory to remove")

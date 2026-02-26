@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -83,7 +84,7 @@ func NewGetNotificationsCmd() *cobra.Command {
 			}
 
 			if err := scanner.Err(); err != nil {
-				if err == context.Canceled || err == context.DeadlineExceeded {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return nil
 				}
 				if strings.Contains(err.Error(), "use of closed network connection") {
@@ -171,7 +172,7 @@ func NewGetProjectNotificationCmd() *cobra.Command {
 			}
 
 			if err := scanner.Err(); err != nil {
-				if err == context.Canceled || err == context.DeadlineExceeded {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return nil
 				}
 				if strings.Contains(err.Error(), "use of closed network connection") {

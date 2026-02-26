@@ -60,9 +60,9 @@ func NewGetPoolCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getPools", "name", multi)
-				err := fuzzy.FuzzyInfo(params)
-				if err != nil {
-					return err
+				fuzzyErr := fuzzy.FuzzyInfo(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 			} else {
 				id := args[0]
@@ -115,14 +115,14 @@ func NewGetPoolResourcesCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getPools", "name", multi, "pool", "Pool:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				poolResources, err := utils.GetResourceWithContext(cfg, "getPoolResources", ids, "pool", "Pool:")
-				if err != nil {
-					return fmt.Errorf("error getting pool resources: %w", err)
+				poolResources, poolErr := utils.GetResourceWithContext(cfg, "getPoolResources", ids, "pool", "Pool:")
+				if poolErr != nil {
+					return fmt.Errorf("error getting pool resources: %w", poolErr)
 				}
 
 				utils.PrintResourceWithContext(poolResources, "Pool:")

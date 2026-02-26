@@ -178,9 +178,9 @@ func NewGetProjectExportCmd() *cobra.Command {
 				return fmt.Errorf("failed to export project: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
+				if closeErr := resp.Body.Close(); closeErr != nil {
 					// Keep silent on body close errors
-					_ = err
+					_ = closeErr
 				}
 			}()
 
@@ -188,7 +188,7 @@ func NewGetProjectExportCmd() *cobra.Command {
 				return fmt.Errorf("export failed with status %d: %s", resp.StatusCode, string(exportData))
 			}
 
-			err = os.WriteFile(outputFile, exportData, 0o644)
+			err = os.WriteFile(outputFile, exportData, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to save export file: %w", err)
 			}
@@ -302,9 +302,9 @@ func NewGetProjectFileCmd() *cobra.Command {
 				return fmt.Errorf("failed to get project file: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
+				if closeErr := resp.Body.Close(); closeErr != nil {
 					// Keep silent on body close errors
-					_ = err
+					_ = closeErr
 				}
 			}()
 
@@ -312,7 +312,7 @@ func NewGetProjectFileCmd() *cobra.Command {
 				return fmt.Errorf("failed to get project file with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0o644)
+			err = os.WriteFile(outputFile, fileData, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to save project file: %w", err)
 			}
@@ -384,9 +384,9 @@ func NewGetNodeFileCmd() *cobra.Command {
 				return fmt.Errorf("failed to get node file: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
+				if closeErr := resp.Body.Close(); closeErr != nil {
 					// Keep silent on body close errors
-					_ = err
+					_ = closeErr
 				}
 			}()
 
@@ -394,7 +394,7 @@ func NewGetNodeFileCmd() *cobra.Command {
 				return fmt.Errorf("failed to get node file with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0o644)
+			err = os.WriteFile(outputFile, fileData, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to save node file: %w", err)
 			}
@@ -465,9 +465,9 @@ func NewStreamPcapCmd() *cobra.Command {
 				return fmt.Errorf("failed to stream PCAP: %w", err)
 			}
 			defer func() {
-				if err := resp.Body.Close(); err != nil {
+				if closeErr := resp.Body.Close(); closeErr != nil {
 					// Keep silent on body close errors
-					_ = err
+					_ = closeErr
 				}
 			}()
 
@@ -475,7 +475,7 @@ func NewStreamPcapCmd() *cobra.Command {
 				return fmt.Errorf("failed to stream PCAP with status %d: %s", resp.StatusCode, string(fileData))
 			}
 
-			err = os.WriteFile(outputFile, fileData, 0o644)
+			err = os.WriteFile(outputFile, fileData, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to save PCAP file: %w", err)
 			}

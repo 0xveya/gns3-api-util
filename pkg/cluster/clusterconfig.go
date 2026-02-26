@@ -22,7 +22,7 @@ func LoadClusterConfig() (Config, error) {
 		return c, getDirErr
 	}
 	path := filepath.Join(dir, "cluster_config.toml")
-	f, readErr := os.ReadFile(path)
+	f, readErr := os.ReadFile(path) // #nosec G304
 	if readErr != nil {
 		return c, ErrNoConfig
 	}
@@ -58,8 +58,8 @@ func EnsureConfigSyncedFromDB(ctx context.Context) (Config, bool, error) {
 				return Config{}, false, fmt.Errorf("merge config: %w", mergeErr)
 			}
 
-			if err := WriteClusterConfig(bootstrapped); err != nil {
-				return Config{}, false, fmt.Errorf("failed to write new config: %w", err)
+			if writeErr := WriteClusterConfig(bootstrapped); writeErr != nil {
+				return Config{}, false, fmt.Errorf("failed to write new config: %w", writeErr)
 			}
 			return bootstrapped, true, nil
 		}
@@ -107,5 +107,5 @@ func WriteClusterConfig(c Config) error {
 	if marshallErr != nil {
 		return marshallErr
 	}
-	return os.WriteFile(path, res, 0o644)
+	return os.WriteFile(path, res, 0o600)
 }

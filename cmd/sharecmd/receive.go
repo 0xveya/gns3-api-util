@@ -35,7 +35,7 @@ func NewReceiveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tlsConf := transport.ServerTLS(cert)
+			tlsConf := transport.ServerTLS(&cert)
 
 			// 3) QUIC server with server key for SAS
 			srv := transport.Server{
@@ -51,8 +51,8 @@ func NewReceiveCmd() *cobra.Command {
 				return err
 			}
 			defer func() {
-				if err := closeFn(); err != nil {
-					log.Println("close listener:", err)
+				if closeErr := closeFn(); closeErr != nil {
+					log.Println("close listener:", closeErr)
 				}
 			}()
 

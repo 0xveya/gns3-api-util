@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -46,8 +47,8 @@ func (c *SSHClient) ExecuteCommand(command string) (*CommandResult, error) {
 		return nil, fmt.Errorf("failed to create SSH session: %w", err)
 	}
 	defer func() {
-		if err := session.Close(); err != nil {
-			fmt.Printf("failed to close session: %v", err)
+		if closeErr := session.Close(); closeErr != nil {
+			fmt.Printf("failed to close session: %v", closeErr)
 		}
 	}()
 
@@ -91,7 +92,7 @@ func ConnectWithKeyOrPassword(hostname, username string, port int, customPrivate
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // #nosec G106
 		Timeout:         30 * time.Second,
 	}
 
@@ -225,7 +226,7 @@ func getPrivateKeyPaths(customPath string) []string {
 }
 
 func loadPrivateKey(keyPath string) (ssh.Signer, error) {
-	key, err := os.ReadFile(keyPath)
+	key, err := os.ReadFile(keyPath) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
@@ -247,13 +248,16 @@ func getPrivateKeyAuth(keyPath string) (ssh.AuthMethod, error) {
 }
 
 func getSSHAgentAuth() []ssh.AuthMethod {
-	sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	var d net.Dialer
+	sshAgent, err := d.DialContext(ctx, "unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil
 	}
 	defer func() {
-		if err := sshAgent.Close(); err != nil {
-			fmt.Printf("failed to close SSH agent connection: %v", err)
+		if closeAgentErr := sshAgent.Close(); closeAgentErr != nil {
+			fmt.Printf("failed to close SSH agent connection: %v", closeAgentErr)
 		}
 	}()
 

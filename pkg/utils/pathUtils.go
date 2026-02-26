@@ -42,13 +42,15 @@ func GetGNS3Dir() (string, error) {
 
 	gns3Dir := filepath.Join(home, ".gns3")
 	info, err := os.Stat(gns3Dir)
-	if os.IsNotExist(err) {
-		if err := os.MkdirAll(gns3Dir, 0o755); err != nil {
+	switch {
+	case os.IsNotExist(err):
+		err = os.MkdirAll(gns3Dir, 0o750)
+		if err != nil {
 			return "", fmt.Errorf("could not create %q: %w", gns3Dir, err)
 		}
-	} else if err != nil {
+	case err != nil:
 		return "", fmt.Errorf("could not stat %q: %w", gns3Dir, err)
-	} else if !info.IsDir() {
+	case !info.IsDir():
 		return "", fmt.Errorf("%q already exists and is not a directory", gns3Dir)
 	}
 
@@ -56,7 +58,7 @@ func GetGNS3Dir() (string, error) {
 }
 
 func LoadGNS3KeysFile(path string) ([]GNS3Key, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304
 	if os.IsNotExist(err) {
 		return nil, nil
 	}

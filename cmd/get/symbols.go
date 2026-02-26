@@ -60,7 +60,7 @@ func NewGetSymbolCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getSymbols", "symbol_id", multi)
-				err := fuzzy.FuzzyInfo(params)
+				err = fuzzy.FuzzyInfo(params)
 				if err != nil {
 					return err
 				}
@@ -115,7 +115,7 @@ func NewGetSymbolDimensionsCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getSymbols", "symbol_id", multi)
-				err := fuzzy.FuzzyInfo(params)
+				err = fuzzy.FuzzyInfo(params)
 				if err != nil {
 					return err
 				}

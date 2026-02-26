@@ -26,7 +26,7 @@ func ApplyConfig(cfg Config) error {
 	for _, cluster := range cfg.Clusters {
 		for _, node := range cluster.Nodes {
 			url := fmt.Sprintf("%s://%s:%d", node.Protocol, node.Host, node.Port)
-			if !utils.ValidateAndTestUrl(url) {
+			if !utils.ValidateAndTestUrl(ctx, url) {
 				return fmt.Errorf("cannot connect to: %s", url)
 			}
 		}
@@ -36,7 +36,12 @@ func ApplyConfig(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			// Log the rollback error but don't override the original error
+			fmt.Printf("Warning: failed to rollback transaction: %v\n", rollbackErr)
+		}
+	}()
 
 	qtx := store.WithTx(tx)
 
@@ -188,7 +193,7 @@ func SyncConfigWithDb(ctx context.Context, cfg Config) (Config, bool, error) {
 	var dbClusters []sqlc.Cluster
 	var dbNodes []sqlc.Node
 
-	err = store.ReadOnlyTx(ctx, func(q *sqlc.Queries) error {
+	err = store.ReadOnly(ctx, func(q *sqlc.Queries) error {
 		var txErr error
 		dbClusters, txErr = q.GetClusters(ctx)
 		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
@@ -211,7 +216,7 @@ func CheckConfigWithDb(ctx context.Context, store *db.Store, cfg Config, verbose
 	var dbClusters []sqlc.Cluster
 	var dbNodes []sqlc.Node
 
-	err := store.ReadOnlyTx(ctx, func(q *sqlc.Queries) error {
+	err := store.ReadOnly(ctx, func(q *sqlc.Queries) error {
 		var txErr error
 		dbClusters, txErr = q.GetClusters(ctx)
 		if txErr != nil && !errors.Is(txErr, sql.ErrNoRows) {
@@ -235,7 +240,7 @@ func PurgeConfig(cfg Config, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	nukeErr := store.Queries.NukeEverything(ctx)
+	nukeErr := store.NukeEverything(ctx)
 	if nukeErr != nil {
 		return fmt.Errorf("nuke: %w", nukeErr)
 	}

@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 
@@ -23,7 +24,7 @@ func sendOne(ctx context.Context, conn *quic.Conn, absPath string, meta FileMeta
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(absPath)
+	f, err := os.Open(absPath) // #nosec G304
 	if err != nil {
 		s.CancelWrite(0)
 		return err
@@ -36,9 +37,15 @@ func sendOne(ctx context.Context, conn *quic.Conn, absPath string, meta FileMeta
 
 	// header: uint16 nameLen | name bytes | uint64 size
 	name := []byte(meta.Rel)
+	if len(name) > 65535 {
+		return fmt.Errorf("filename too long")
+	}
 	hdr := make([]byte, 2+len(name)+8)
-	binary.BigEndian.PutUint16(hdr[0:2], uint16(len(name)))
+	binary.BigEndian.PutUint16(hdr[0:2], uint16(len(name))) // #nosec G115
 	copy(hdr[2:2+len(name)], name)
+	if meta.Size < 0 {
+		return fmt.Errorf("negative file size")
+	}
 	binary.BigEndian.PutUint64(hdr[2+len(name):], uint64(meta.Size))
 
 	if _, err := s.Write(hdr); err != nil {

@@ -42,14 +42,14 @@ func NewGetSnapshotsCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				snapshots, err := utils.GetResourceWithContext(cfg, "getSnapshots", ids, "project", "Project:")
-				if err != nil {
-					return fmt.Errorf("error getting snapshots: %w", err)
+				snapshots, snapErr := utils.GetResourceWithContext(cfg, "getSnapshots", ids, "project", "Project:")
+				if snapErr != nil {
+					return fmt.Errorf("error getting snapshots: %w", snapErr)
 				}
 
 				utils.PrintResourceWithContext(snapshots, "Project:")

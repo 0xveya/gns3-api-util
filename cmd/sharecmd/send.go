@@ -32,7 +32,7 @@ func promptTrustCLI(peerLabel, fp string, words []string) (bool, error) {
 	return line == "y" || line == "yes", nil
 }
 
-func selectReceiver(ctx context.Context, hint string, timeout time.Duration) (addr string, label string, err error) {
+func selectReceiver(ctx context.Context, hint string, timeout time.Duration) (addr, label string, err error) {
 	if hint != "" && strings.Contains(hint, ":") {
 		return hint, hint, nil
 	}
@@ -162,7 +162,7 @@ func NewSendCmd() *cobra.Command {
 			}
 			defer func() { _ = conn.CloseWithError(0, "done") }()
 
-			fmt.Printf("%s %s as %s\n", colorUtils.Success("Connected to"), colorUtils.Highlight(target), colorUtils.Bold(fmt.Sprintf("\"%s\"", hello.Label)))
+			fmt.Printf("%s %s as %s\n", colorUtils.Success("Connected to"), colorUtils.Highlight(target), colorUtils.Bold(fmt.Sprintf("%q", hello.Label)))
 
 			candidates := []string{"cluster_config.toml", "clusterData.db", "gns3key"}
 			exists := func(rel string) (string, os.FileInfo, bool) {

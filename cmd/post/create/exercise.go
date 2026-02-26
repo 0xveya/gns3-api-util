@@ -67,8 +67,8 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 	}
 
 	var groups []schemas.UserGroupResponse
-	if err := json.Unmarshal(groupsBody, &groups); err != nil {
-		return fmt.Errorf("failed to parse groups response: %w", err)
+	if unmarshalErr := json.Unmarshal(groupsBody, &groups); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse groups response: %w", unmarshalErr)
 	}
 
 	classGroups := findClassGroups(groups, className)
@@ -219,8 +219,8 @@ func createProjectForGroup(cfg config.GlobalOptions, projectName, groupID, roleI
 	}
 
 	var projectResponse schemas.ProjectResponse
-	if err := json.Unmarshal(projectBody, &projectResponse); err != nil {
-		return fmt.Errorf("failed to parse project response: %w", err)
+	if unmarshalErr := json.Unmarshal(projectBody, &projectResponse); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse project response: %w", unmarshalErr)
 	}
 
 	projectID := projectResponse.ProjectID
@@ -249,8 +249,8 @@ func createProjectForGroup(cfg config.GlobalOptions, projectName, groupID, roleI
 	}
 
 	var poolResponse schemas.ResourcePoolResponse
-	if err := json.Unmarshal(poolBody, &poolResponse); err != nil {
-		return fmt.Errorf("failed to parse pool response: %w", err)
+	if unmarshalErr := json.Unmarshal(poolBody, &poolResponse); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse pool response: %w", unmarshalErr)
 	}
 
 	poolID := poolResponse.ResourcePoolID
@@ -310,7 +310,8 @@ func checkExistingExercises(cfg config.GlobalOptions, className string, classGro
 	}
 
 	var existingExercises []string
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 && parts[0] == className {
 			groupName := strings.Join(parts[:3], "-")

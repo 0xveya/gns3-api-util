@@ -79,14 +79,14 @@ func NewStateManager() (*StateManager, error) {
 	}
 
 	stateDir := filepath.Join(homeDir, ".gns3")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	return &StateManager{StateDir: stateDir}, nil
 }
 
-func (sm *StateManager) SaveState(serverHost string, state GNS3ServerState) error {
+func (sm *StateManager) SaveState(serverHost string, state *GNS3ServerState) error {
 	stateFile := filepath.Join(sm.StateDir, fmt.Sprintf("gns3_server_%s.json", serverHost))
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -94,7 +94,7 @@ func (sm *StateManager) SaveState(serverHost string, state GNS3ServerState) erro
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(stateFile, data, 0o644); err != nil {
+	if err := os.WriteFile(stateFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -104,7 +104,7 @@ func (sm *StateManager) SaveState(serverHost string, state GNS3ServerState) erro
 func (sm *StateManager) LoadState(serverHost string) (*GNS3ServerState, error) {
 	stateFile := filepath.Join(sm.StateDir, fmt.Sprintf("gns3_server_%s.json", serverHost))
 
-	data, err := os.ReadFile(stateFile)
+	data, err := os.ReadFile(stateFile) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("no state found for server %s", serverHost)
@@ -138,7 +138,7 @@ func (sm *StateManager) ListStates() ([]GNS3ServerState, error) {
 
 	var states []GNS3ServerState
 	for _, file := range files {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(file) // #nosec G304
 		if err != nil {
 			continue
 		}
@@ -154,7 +154,7 @@ func (sm *StateManager) ListStates() ([]GNS3ServerState, error) {
 	return states, nil
 }
 
-func ValidateInstallGNS3Input(args InstallGNS3Args) error {
+func ValidateInstallGNS3Input(args *InstallGNS3Args) error {
 	if args.GNS3Port < 1 || args.GNS3Port > 65535 {
 		return fmt.Errorf("invalid GNS3 port: %d (must be 1-65535)", args.GNS3Port)
 	}
@@ -174,7 +174,7 @@ func ValidateInstallGNS3Input(args InstallGNS3Args) error {
 	return nil
 }
 
-func ValidateUninstallGNS3Input(args InstallGNS3Args) error {
+func ValidateUninstallGNS3Input(args *InstallGNS3Args) error {
 	if args.GNS3Port < 1 || args.GNS3Port > 65535 {
 		return fmt.Errorf("invalid GNS3 port: %d (must be 1-65535)", args.GNS3Port)
 	}
@@ -192,7 +192,7 @@ func ValidateUninstallGNS3Input(args InstallGNS3Args) error {
 	return nil
 }
 
-func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
+func ParseServerURLForSSH(serverURL string, portOption int) (hostname string, port int) {
 	cleanURL := serverURL
 	if strings.HasPrefix(serverURL, "http://") {
 		cleanURL = strings.TrimPrefix(serverURL, "http://")
@@ -202,7 +202,7 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 	// Parse the URL to extract hostname and port
 	parsedURL, err := url.Parse("http://" + cleanURL)
 	if err != nil {
-		hostname, port := splitHostPort(cleanURL)
+		hostname, port = splitHostPort(cleanURL)
 		if portOption > 0 {
 			return hostname, portOption
 		}
@@ -212,8 +212,8 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 		return hostname, 22
 	}
 
-	hostname := parsedURL.Hostname()
-	port := 22
+	hostname = parsedURL.Hostname()
+	port = 22
 
 	if portOption > 0 {
 		port = portOption
@@ -226,7 +226,7 @@ func ParseServerURLForSSH(serverURL string, portOption int) (string, int) {
 	return hostname, port
 }
 
-func splitHostPort(hostPort string) (string, int) {
+func splitHostPort(hostPort string) (host string, port int) {
 	parts := strings.Split(hostPort, ":")
 	if len(parts) == 2 {
 		if port, err := strconv.Atoi(parts[1]); err == nil {
@@ -236,18 +236,18 @@ func splitHostPort(hostPort string) (string, int) {
 	return hostPort, 0
 }
 
-func EditScriptWithFlags(script string, args InstallGNS3Args) string {
+func EditScriptWithFlags(script string, args *InstallGNS3Args) string {
 	lines := strings.Split(script, "\n")
 
 	for i, line := range lines {
 		// Replace GNS3_USER="" with actual username
 		if strings.Contains(line, `GNS3_USER="gns3"`) {
-			lines[i] = strings.Replace(line, `GNS3_USER="gns3"`, fmt.Sprintf(`GNS3_USER="%s"`, args.Username), 1)
+			lines[i] = strings.Replace(line, `GNS3_USER="gns3"`, fmt.Sprintf(`GNS3_USER=%q`, args.Username), 1)
 		}
 
 		// Replace GNS3_HOME="" with actual home directory
 		if strings.Contains(line, `GNS3_HOME="/opt/gns3"`) {
-			lines[i] = strings.Replace(line, `GNS3_HOME="/opt/gns3"`, fmt.Sprintf(`GNS3_HOME="%s"`, args.HomeDir), 1)
+			lines[i] = strings.Replace(line, `GNS3_HOME="/opt/gns3"`, fmt.Sprintf(`GNS3_HOME=%q`, args.HomeDir), 1)
 		}
 
 		// Replace GNS3_PORT with actual port
@@ -257,7 +257,7 @@ func EditScriptWithFlags(script string, args InstallGNS3Args) string {
 
 		// Replace GNS3_LISTEN_HOST with actual listen host
 		if strings.Contains(line, `GNS3_LISTEN_HOST="0.0.0.0"`) {
-			lines[i] = strings.Replace(line, `GNS3_LISTEN_HOST="0.0.0.0"`, fmt.Sprintf(`GNS3_LISTEN_HOST="%s"`, args.ListenHost), 1)
+			lines[i] = strings.Replace(line, `GNS3_LISTEN_HOST="0.0.0.0"`, fmt.Sprintf(`GNS3_LISTEN_HOST=%q`, args.ListenHost), 1)
 		}
 
 		// Replace DISABLE_KVM with actual value
@@ -380,16 +380,16 @@ func GetUninstallScript() string {
 	return gns3UninstallScript
 }
 
-func EditUninstallScriptWithFlags(script string, args InstallGNS3Args) string {
+func EditUninstallScriptWithFlags(script string, args *InstallGNS3Args) string {
 	lines := strings.Split(script, "\n")
 
 	for i, line := range lines {
 		if strings.Contains(line, "GNS3_USER=\"\"") {
-			lines[i] = fmt.Sprintf("GNS3_USER=\"%s\"", args.Username)
+			lines[i] = fmt.Sprintf("GNS3_USER=%q", args.Username)
 		}
 
 		if strings.Contains(line, "GNS3_HOME=\"\"") {
-			lines[i] = fmt.Sprintf("GNS3_HOME=\"%s\"", args.HomeDir)
+			lines[i] = fmt.Sprintf("GNS3_HOME=%q", args.HomeDir)
 		}
 
 		if strings.Contains(line, "GNS3_PORT=\"\"") {

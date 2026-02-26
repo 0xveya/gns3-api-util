@@ -19,7 +19,7 @@ type FuzzyInfoParams struct {
 	ContextLabel string
 }
 
-func FuzzyInfo(params FuzzyInfoParams) error {
+func FuzzyInfo(params *FuzzyInfoParams) error {
 	var selected []gjson.Result
 	apiData, vals, err := getValuesForFuzzy(params)
 	if err != nil {
@@ -27,11 +27,10 @@ func FuzzyInfo(params FuzzyInfoParams) error {
 	}
 	results := NewFuzzyFinder(vals, params.Multi)
 	for _, result := range results {
-	outer:
 		for _, data := range apiData {
 			if element := data.Get(params.Key); element.Exists() && element.String() == result {
 				selected = append(selected, data)
-				break outer
+				break
 			}
 		}
 	}
@@ -61,7 +60,7 @@ func FuzzyInfo(params FuzzyInfoParams) error {
 	}
 }
 
-func FuzzyInfoIDs(params FuzzyInfoParams) ([]string, error) {
+func FuzzyInfoIDs(params *FuzzyInfoParams) ([]string, error) {
 	var selectedIDs []string
 	apiData, vals, err := getValuesForFuzzy(params)
 	if err != nil {
@@ -77,13 +76,12 @@ func FuzzyInfoIDs(params FuzzyInfoParams) ([]string, error) {
 	}
 
 	for _, result := range results {
-	outer:
 		for _, data := range apiData {
 			if element := data.Get(params.Key); element.Exists() && element.String() == result {
 				if id := data.Get(idField); id.Exists() {
 					selectedIDs = append(selectedIDs, id.String())
 				}
-				break outer
+				break
 			}
 		}
 	}
@@ -91,7 +89,7 @@ func FuzzyInfoIDs(params FuzzyInfoParams) ([]string, error) {
 	return selectedIDs, nil
 }
 
-func FuzzyInfoIDsWithData(params FuzzyInfoParams) ([]string, []gjson.Result, error) {
+func FuzzyInfoIDsWithData(params *FuzzyInfoParams) ([]string, []gjson.Result, error) {
 	var selectedIDs []string
 	var selectedData []gjson.Result
 	apiData, vals, err := getValuesForFuzzy(params)
@@ -108,14 +106,13 @@ func FuzzyInfoIDsWithData(params FuzzyInfoParams) ([]string, []gjson.Result, err
 	}
 
 	for _, result := range results {
-	outer:
 		for _, data := range apiData {
 			if element := data.Get(params.Key); element.Exists() && element.String() == result {
 				if id := data.Get(idField); id.Exists() {
 					selectedIDs = append(selectedIDs, id.String())
 					selectedData = append(selectedData, data)
 				}
-				break outer
+				break
 			}
 		}
 	}
@@ -186,7 +183,7 @@ func getResourceTypeFromMethod(method string) string {
 	return "unknown"
 }
 
-func getValuesForFuzzy(params FuzzyInfoParams) ([]gjson.Result, []string, error) {
+func getValuesForFuzzy(params *FuzzyInfoParams) ([]gjson.Result, []string, error) {
 	rawData, _, err := utils.CallClient(params.Cfg, params.Method, nil, nil)
 	if err != nil {
 		return nil, nil, err
@@ -211,8 +208,8 @@ func getValuesForFuzzy(params FuzzyInfoParams) ([]gjson.Result, []string, error)
 	return apiData, results, nil
 }
 
-func NewFuzzyInfoParams(cfg config.GlobalOptions, method, key string, multi bool) FuzzyInfoParams {
-	return FuzzyInfoParams{
+func NewFuzzyInfoParams(cfg config.GlobalOptions, method, key string, multi bool) *FuzzyInfoParams {
+	return &FuzzyInfoParams{
 		Cfg:    cfg,
 		Multi:  multi,
 		Method: method,
@@ -220,8 +217,8 @@ func NewFuzzyInfoParams(cfg config.GlobalOptions, method, key string, multi bool
 	}
 }
 
-func NewFuzzyInfoParamsWithContext(cfg config.GlobalOptions, method, key string, multi bool, contextType, contextLabel string) FuzzyInfoParams {
-	return FuzzyInfoParams{
+func NewFuzzyInfoParamsWithContext(cfg config.GlobalOptions, method, key string, multi bool, contextType, contextLabel string) *FuzzyInfoParams {
+	return &FuzzyInfoParams{
 		Cfg:          cfg,
 		Multi:        multi,
 		Method:       method,

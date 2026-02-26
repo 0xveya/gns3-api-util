@@ -22,7 +22,7 @@ type Server struct {
 func (s *Server) Listen(
 	ctx context.Context,
 	addr string,
-) (net.Addr, <-chan error, func() error, error) {
+) (localAddr net.Addr, errsOut <-chan error, closeFn func() error, err error) {
 	if s.TLS == nil {
 		return nil, nil, nil, fmt.Errorf("TLS config required")
 	}
@@ -88,18 +88,18 @@ func handleConn(ctx context.Context, c *quic.Conn, serverPriv ed25519.PrivateKey
 
 	// 2) Hello exchange
 	var cli Hello
-	if err := ReadJSON(ctx, ctrl, &cli); err != nil {
+	if readJsonErr := ReadJSON(ctx, ctrl, &cli); readJsonErr != nil {
 		_ = c.CloseWithError(0, "bad hello")
 		return
 	}
-	if err := WriteJSON(ctx, ctrl, Hello{Label: "server", FP: "unknown"}); err != nil {
+	if writeJsonErr := WriteJSON(ctx, ctrl, Hello{Label: "server", FP: "unknown"}); writeJsonErr != nil {
 		_ = c.CloseWithError(0, "write hello failed")
 		return
 	}
 
 	// 3) SAS nonce exchange
 	var clientSAS SASMsg
-	if err := ReadJSON(ctx, ctrl, &clientSAS); err != nil {
+	if readJsonErr := ReadJSON(ctx, ctrl, &clientSAS); readJsonErr != nil {
 		_ = c.CloseWithError(0, "read client nonce")
 		return
 	}
@@ -113,7 +113,11 @@ func handleConn(ctx context.Context, c *quic.Conn, serverPriv ed25519.PrivateKey
 		return
 	}
 
-	serverPub := serverPriv.Public().(ed25519.PublicKey)
+	serverPub, ok := serverPriv.Public().(ed25519.PublicKey)
+	if !ok {
+		_ = c.CloseWithError(0, "failed to get public key")
+		return
+	}
 	if words, err := DerivePGPWordsSimple(serverPub, clientSAS.Nonce, serverNonce, 3); err == nil {
 		fmt.Printf("%s %s\n", colorUtils.Info("Verify code:"), colorUtils.Highlight(FormatSAS(words)))
 	}
@@ -132,7 +136,7 @@ func handleConn(ctx context.Context, c *quic.Conn, serverPriv ed25519.PrivateKey
 	// 5) Destination directory: ~/.gns3
 	home, _ := os.UserHomeDir()
 	dst := filepath.Join(home, ".gns3")
-	if err := os.MkdirAll(dst, 0o755); err != nil {
+	if err := os.MkdirAll(dst, 0o750); err != nil {
 		_ = c.CloseWithError(0, "mkdir failed")
 		return
 	}

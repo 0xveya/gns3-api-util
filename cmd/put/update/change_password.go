@@ -59,7 +59,8 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 			var username string
 
 			if useFuzzy {
-				rawData, _, err := utils.CallClient(cfg, "getUsers", nil, nil)
+				var rawData []byte
+				rawData, _, err = utils.CallClient(cfg, "getUsers", nil, nil)
 				if err != nil {
 					return fmt.Errorf("error getting users: %w", err)
 				}

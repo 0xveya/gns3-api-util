@@ -48,9 +48,9 @@ func NewNodeDuplicateCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -113,9 +113,9 @@ func NewNodeConsoleResetCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -178,9 +178,9 @@ func NewNodeIsolateCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -243,9 +243,9 @@ func NewNodeUnisolateCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -307,9 +307,9 @@ func NewReloadNodesCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -367,9 +367,9 @@ func NewStartNodesCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -427,9 +427,9 @@ func NewStopNodesCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -487,9 +487,9 @@ func NewSuspendNodesCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}

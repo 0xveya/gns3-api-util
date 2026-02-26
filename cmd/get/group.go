@@ -42,7 +42,7 @@ func NewGetGroupCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getGroups", "name", multi)
-				err := fuzzy.FuzzyInfo(params)
+				err = fuzzy.FuzzyInfo(params)
 				if err != nil {
 					return err
 				}
@@ -115,14 +115,14 @@ func NewGetGroupMembersCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getGroups", "name", multi, "group", "Group:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				groupMembers, err := utils.GetResourceWithContext(cfg, "getGroupMembers", ids, "group", "Group:")
-				if err != nil {
-					return fmt.Errorf("error getting group members: %w", err)
+				groupMembers, membersErr := utils.GetResourceWithContext(cfg, "getGroupMembers", ids, "group", "Group:")
+				if membersErr != nil {
+					return fmt.Errorf("error getting group members: %w", membersErr)
 				}
 
 				utils.PrintResourceWithContext(groupMembers, "Group:")

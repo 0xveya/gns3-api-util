@@ -265,7 +265,8 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 		targetExerciseName = exerciseName
 	}
 
-	if targetExerciseName != "" {
+	switch {
+	case targetExerciseName != "":
 		if clusterName != "" {
 			if err := deleteExerciseInCluster(cfg, clusterName, targetExerciseName, className, groupName, confirm); err != nil {
 				return fmt.Errorf("failed to delete exercise: %w", err)
@@ -275,7 +276,7 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("failed to delete exercise: %w", err)
 			}
 		}
-	} else if deleteAll {
+	case deleteAll:
 		var exerciseNames []string
 		var err error
 		if clusterName != "" {
@@ -318,11 +319,11 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 					derr)
 			}
 		}
-	} else if className != "" {
+	case className != "":
 		if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm, ctx); err != nil {
 			return fmt.Errorf("failed to delete exercises for class: %w", err)
 		}
-	} else if selectExercise || (!selectClass && !selectGroup) {
+	case selectExercise || (!selectClass && !selectGroup):
 		var exerciseNames []string
 		var err error
 		if clusterName != "" {
@@ -353,7 +354,7 @@ func runDeleteExercise(cmd *cobra.Command, args []string) error {
 					derr)
 			}
 		}
-	} else {
+	default:
 		if className != "" {
 			if err := deleteAllExercisesForClassWithConfirmation(cfg, className, confirm, ctx); err != nil {
 				return fmt.Errorf("failed to delete exercises for class: %w", err)
@@ -383,7 +384,8 @@ func selectExercisesWithFuzzy(cfg config.GlobalOptions, multi bool) ([]string, e
 	var exerciseNames []string
 	seenExercises := make(map[string]bool)
 
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 {
 			exerciseName := parts[1]
@@ -423,7 +425,8 @@ func getAllExerciseNames(cfg config.GlobalOptions) ([]string, error) {
 	var exerciseNames []string
 	seenExercises := make(map[string]bool)
 
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 {
 			exerciseName := parts[1]
@@ -503,7 +506,8 @@ func selectClassWithFuzzy(cfg config.GlobalOptions) (string, error) {
 	}
 
 	classSet := make(map[string]bool)
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 {
 			className := parts[2]
@@ -544,7 +548,8 @@ func selectGroupWithFuzzy(cfg config.GlobalOptions, className string) (string, e
 	}
 
 	groupSet := make(map[string]bool)
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 {
 			projectClass := parts[2]

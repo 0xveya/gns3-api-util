@@ -11,7 +11,7 @@ type Advertiser struct {
 }
 
 func (a *Advertiser) Start(instance string, port int, txt map[string]string) (func(), error) {
-	var txtSlice []string
+	txtSlice := make([]string, 0, len(txt))
 	for k, v := range txt {
 		txtSlice = append(txtSlice, fmt.Sprintf("%s=%s", k, v))
 	}

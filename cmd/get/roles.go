@@ -60,7 +60,7 @@ func NewGetRoleCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParams(cfg, "getRoles", "name", multi)
-				err := fuzzy.FuzzyInfo(params)
+				err = fuzzy.FuzzyInfo(params)
 				if err != nil {
 					return err
 				}
@@ -115,14 +115,14 @@ func NewGetRolePrivsCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getRoles", "name", multi, "role", "Role:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				rolePrivs, err := utils.GetResourceWithContext(cfg, "getRolePrivs", ids, "role", "Role:")
-				if err != nil {
-					return fmt.Errorf("error getting role privileges: %w", err)
+				rolePrivs, privsErr := utils.GetResourceWithContext(cfg, "getRolePrivs", ids, "role", "Role:")
+				if privsErr != nil {
+					return fmt.Errorf("error getting role privileges: %w", privsErr)
 				}
 
 				utils.PrintResourceWithContext(rolePrivs, "Role:")

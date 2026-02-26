@@ -142,7 +142,7 @@ func SaveAuthData(cfg config.GlobalOptions, token schemas.Token, username string
 		keys = append(keys, newKey)
 	}
 
-	f, err := os.OpenFile(keyFileLocation, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(keyFileLocation, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to open key file %q: %w", keyFileLocation, err)
 	}

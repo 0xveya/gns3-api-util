@@ -17,9 +17,9 @@ func ResolveClusterID(cfg config.GlobalOptions, clusterName string, ctx context.
 	}
 
 	if clusterName != "" {
-		clusters, err := store.GetClusters(context.Background())
-		if err != nil {
-			return 0, fmt.Errorf("failed to get clusters: %w", err)
+		clusters, getClustersErr := store.GetClusters(context.Background())
+		if getClustersErr != nil {
+			return 0, fmt.Errorf("failed to get clusters: %w", getClustersErr)
 		}
 		for _, c := range clusters {
 			if c.Name == clusterName {
@@ -73,7 +73,10 @@ func TransformNodeExercises(rows []sqlc.GetNodeExercisesForClusterRow, className
 	var current *db.NodeExercisesForClass
 
 	for _, row := range filtered {
-		nodeURL := row.NodeUrl.(string)
+		nodeURL, ok := row.NodeUrl.(string)
+		if !ok {
+			continue // skip invalid entries
+		}
 		if current == nil || current.NodeURL != nodeURL {
 			if current != nil {
 				results = append(results, *current)

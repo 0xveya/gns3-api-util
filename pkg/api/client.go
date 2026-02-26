@@ -63,7 +63,7 @@ func NewSettings(opts ...SettingOption) Settings {
 func NewGNS3Client(settings Settings) *GNS3ApiClient {
 	tr := &http.Transport{}
 	if !settings.Verify {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402
 	}
 	return &GNS3ApiClient{
 		settings: settings,
@@ -86,10 +86,10 @@ func NewRequestOptions(settings Settings) *requestOptions {
 	}
 }
 
-func WithBaseURL(url string) SettingOption {
+func WithBaseURL(baseURL string) SettingOption {
 	return func(s *Settings) {
-		if url != "" {
-			s.BaseURL = url + API_VERSION
+		if baseURL != "" {
+			s.BaseURL = baseURL + API_VERSION
 		}
 	}
 }
@@ -141,6 +141,9 @@ func (r *requestOptions) WithStream() *requestOptions {
 
 func (c *GNS3ApiClient) Do(opts *requestOptions) ([]byte, *http.Response, error) {
 	fullURL := c.settings.BaseURL + opts.URL
+	ctx, cancel := context.WithTimeout(context.Background(), c.settings.Timeout)
+	defer cancel()
+	defer cancel()
 
 	if len(opts.params) > 0 {
 		q := url.Values{}
@@ -154,7 +157,7 @@ func (c *GNS3ApiClient) Do(opts *requestOptions) ([]byte, *http.Response, error)
 		streamClient := *c.client
 		streamClient.Timeout = 0
 
-		req, err := http.NewRequest(string(opts.method), fullURL, bytes.NewBufferString(opts.data))
+		req, err := http.NewRequestWithContext(ctx, string(opts.method), fullURL, bytes.NewBufferString(opts.data))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -174,9 +177,6 @@ func (c *GNS3ApiClient) Do(opts *requestOptions) ([]byte, *http.Response, error)
 
 		return nil, resp, nil
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.settings.Timeout)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx,
 		string(opts.method),

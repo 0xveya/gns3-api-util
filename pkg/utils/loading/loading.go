@@ -65,13 +65,13 @@ func NewLoadingModel(message string, steps []string) *LoadingModel {
 	}
 }
 
-func (m LoadingModel) Init() tea.Cmd {
+func (m *LoadingModel) Init() tea.Cmd {
 	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 		return LoadingMsg{Type: "tick"}
 	})
 }
 
-func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LoadingMsg:
 		switch msg.Type {
@@ -103,7 +103,7 @@ func (m LoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m LoadingModel) View() string {
+func (m *LoadingModel) View() string {
 	if m.done {
 		if m.success {
 			return m.renderSuccess()
@@ -113,7 +113,7 @@ func (m LoadingModel) View() string {
 	return m.renderLoading()
 }
 
-func (m LoadingModel) renderLoading() string {
+func (m *LoadingModel) renderLoading() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("🔧 GNS3 SSL Installation\n"))
@@ -126,11 +126,12 @@ func (m LoadingModel) renderLoading() string {
 		sb.WriteString(messageUtils.InfoMsg("Steps:\n"))
 		for i, step := range m.steps {
 			var stepText string
-			if i < m.currentStep {
+			switch {
+			case i < m.currentStep:
 				stepText = completedStepStyle.Render("✓ " + step)
-			} else if i == m.currentStep {
+			case i == m.currentStep:
 				stepText = currentStepStyle.Render("→ " + step)
-			} else {
+			default:
 				stepText = stepStyle.Render("  " + step)
 			}
 			sb.WriteString("  " + stepText + "\n")
@@ -143,7 +144,7 @@ func (m LoadingModel) renderLoading() string {
 	return sb.String()
 }
 
-func (m LoadingModel) renderSuccess() string {
+func (m *LoadingModel) renderSuccess() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("🎉 GNS3 SSL Installation Complete!\n"))
@@ -164,7 +165,7 @@ func (m LoadingModel) renderSuccess() string {
 	return sb.String()
 }
 
-func (m LoadingModel) renderError() string {
+func (m *LoadingModel) renderError() string {
 	var sb strings.Builder
 
 	sb.WriteString(messageUtils.Bold("❌ GNS3 SSL Installation Failed\n"))
@@ -179,11 +180,12 @@ func (m LoadingModel) renderError() string {
 	if len(m.steps) > 0 && m.currentStep > 0 {
 		sb.WriteString(messageUtils.InfoMsg("Completed steps:\n"))
 		for i, step := range m.steps {
-			if i < m.currentStep {
+			switch {
+			case i < m.currentStep:
 				sb.WriteString("  " + completedStepStyle.Render("✓ "+step) + "\n")
-			} else if i == m.currentStep {
+			case i == m.currentStep:
 				sb.WriteString("  " + errorStyle.Render("✗ "+step) + "\n")
-			} else {
+			default:
 				sb.WriteString("  " + stepStyle.Render("  "+step) + "\n")
 			}
 		}

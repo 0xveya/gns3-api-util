@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/stefanistkuhl/gns3util/pkg/api/schemas"
 	"github.com/stefanistkuhl/gns3util/pkg/utils"
@@ -23,8 +24,9 @@ func StartInteractiveServer(host string, port int) (schemas.Class, error) {
 	mux.HandleFunc("/data", handleDataSubmission(classDataChan))
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", host, port),
-		Handler: mux,
+		Addr:              fmt.Sprintf("%s:%d", host, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

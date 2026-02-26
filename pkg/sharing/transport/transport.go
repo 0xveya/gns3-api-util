@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -12,26 +13,27 @@ import (
 )
 
 // SendFile sends a file to the specified address
-func SendFile(ctx context.Context, path string, addr string) error {
+func SendFile(ctx context.Context, path, addr string) error {
 	// Connect to the receiver
-	conn, err := net.Dial("tcp", addr)
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to connect to receiver: %w", err)
 	}
 	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close connection: %v", err)
+		if closeErr := conn.Close(); closeErr != nil {
+			fmt.Printf("failed to close connection: %v", closeErr)
 		}
 	}()
 
 	// Open the file
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("failed to close file: %v", err)
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("failed to close file: %v", closeErr)
 		}
 	}()
 
@@ -49,7 +51,10 @@ func SendFile(ctx context.Context, path string, addr string) error {
 
 	// Send file name
 	fileName := filepath.Base(path)
-	err = binary.Write(conn, binary.BigEndian, int32(len(fileName)))
+	if len(fileName) > 2147483647 {
+		return fmt.Errorf("filename too long")
+	}
+	err = binary.Write(conn, binary.BigEndian, int32(len(fileName))) // #nosec G115
 	if err != nil {
 		return fmt.Errorf("failed to send file name length: %w", err)
 	}
@@ -70,13 +75,16 @@ func SendFile(ctx context.Context, path string, addr string) error {
 // ReceiveFile starts a server to receive a file
 func ReceiveFile(ctx context.Context, port int, outputDir string) (string, error) {
 	// Create a TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return "", fmt.Errorf("failed to start listener: %w", err)
 	}
 	defer func() {
-		if err := listener.Close(); err != nil {
-			fmt.Printf("failed to close listener: %v", err)
+		if lisCloseErr := listener.Close(); lisCloseErr != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				fmt.Printf("failed to close listener: %v\n", lisCloseErr)
+			}
 		}
 	}()
 
@@ -86,8 +94,8 @@ func ReceiveFile(ctx context.Context, port int, outputDir string) (string, error
 		return "", fmt.Errorf("failed to accept connection: %w", err)
 	}
 	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Printf("failed to close connection: %v", err)
+		if closeErr := conn.Close(); closeErr != nil {
+			fmt.Printf("failed to close connection: %v", closeErr)
 		}
 	}()
 
@@ -115,13 +123,13 @@ func ReceiveFile(ctx context.Context, port int, outputDir string) (string, error
 
 	// Create output file
 	outputPath := filepath.Join(outputDir, fileName)
-	outputFile, err := os.Create(outputPath)
+	outputFile, err := os.Create(outputPath) // #nosec G304
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() {
-		if err := outputFile.Close(); err != nil {
-			fmt.Printf("failed to close output file: %v", err)
+		if closeErr := outputFile.Close(); closeErr != nil {
+			fmt.Printf("failed to close output file: %v", closeErr)
 		}
 	}()
 
@@ -141,7 +149,7 @@ func ReceiveFile(ctx context.Context, port int, outputDir string) (string, error
 
 // GeneratePort generates a random port number in the dynamic/private range
 func GeneratePort() int {
-	return rand.Intn(16383) + 49152 // 49152-65535
+	return rand.Intn(16383) + 49152 // #nosec G404 // 49152-65535
 }
 
 // GetLocalIP returns the first non-loopback IP address of the machine

@@ -120,7 +120,6 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 		if convErr != nil {
 			return fmt.Errorf("failed to convert port to int: %w", convErr)
 		}
-		nodeData.Protocol = urlObj.Scheme
 		nodeData.Host = urlObj.Hostname()
 		nodeData.Port = port
 		nodeData.Weight = 10
@@ -160,15 +159,15 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 	var clusterID int
 
 	if !clusterExists && noCluster {
-		clusterData, err := qtx.CreateCluster(ctx, sqlc.CreateClusterParams{Name: clusterName})
-		if err != nil {
-			return fmt.Errorf("failed to create cluster: %w", err)
+		clusterData, createErr := qtx.CreateCluster(ctx, sqlc.CreateClusterParams{Name: clusterName})
+		if createErr != nil {
+			return fmt.Errorf("failed to create cluster: %w", createErr)
 		}
 		clusterID = int(clusterData.ClusterID)
 	} else {
-		clusters, err := qtx.GetClusters(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get existing clusters: %w", err)
+		clusters, getErr := qtx.GetClusters(ctx)
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing clusters: %w", getErr)
 		}
 		for _, cluster := range clusters {
 			if cluster.Name == clusterName {
@@ -198,8 +197,8 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 				maxGroups = sql.NullInt64{Int64: int64(nodeData.MaxGroups), Valid: true}
 			}
 			sqlcNodeData := sqlc.InsertNodeParams{ClusterID: int64(clusterID), Host: nodeData.Host, Port: int64(nodeData.Port), Weight: int64(nodeData.Weight), MaxGroups: maxGroups, AuthUser: nodeData.User}
-			if err := qtx.InsertNode(ctx, sqlcNodeData); err != nil {
-				return fmt.Errorf("failed to create node: %w", err)
+			if insertErr := qtx.InsertNode(ctx, sqlcNodeData); insertErr != nil {
+				return fmt.Errorf("failed to create node: %w", insertErr)
 			}
 		}
 
@@ -216,8 +215,8 @@ func runCreateClass(cmd *cobra.Command, args []string) error {
 			return syncErr
 		}
 		if changed {
-			if err := cluster.WriteClusterConfig(updatedCfg); err != nil {
-				return err
+			if writeErr := cluster.WriteClusterConfig(updatedCfg); writeErr != nil {
+				return writeErr
 			}
 		}
 

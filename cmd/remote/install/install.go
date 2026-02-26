@@ -91,7 +91,8 @@ func NewInstallHttpsCmd() *cobra.Command {
 				Verbose:          verbose,
 			}
 
-			if err := ssl.ValidateInstallSSLInput(sslArgs); err != nil {
+			err = ssl.ValidateInstallSSLInput(&sslArgs)
+			if err != nil {
 				return fmt.Errorf("validation error: %w", err)
 			}
 
@@ -112,14 +113,15 @@ func NewInstallHttpsCmd() *cobra.Command {
 			fmt.Printf("%s Connected successfully\n", messageUtils.SuccessMsg("Connected successfully"))
 
 			fmt.Printf("%s Checking user privileges...\n", messageUtils.InfoMsg("Checking user privileges"))
-			if err := sshClient.CheckPrivileges(); err != nil {
+			err = sshClient.CheckPrivileges()
+			if err != nil {
 				return fmt.Errorf("privilege check failed: %w", err)
 			}
 			fmt.Printf("%s Privileges verified\n", messageUtils.SuccessMsg("Privileges verified"))
 
 			fmt.Printf("%s Preparing SSL installation script...\n", messageUtils.InfoMsg("Preparing SSL installation script"))
 			scriptText := ssl.GetEmbeddedScript()
-			modifiedScript := ssl.EditScriptWithFlags(scriptText, sslArgs)
+			modifiedScript := ssl.EditScriptWithFlags(scriptText, &sslArgs)
 			fmt.Printf("%s Script prepared\n", messageUtils.SuccessMsg("Script prepared"))
 
 			fmt.Printf("%s Installing Caddy reverse proxy...\n", messageUtils.InfoMsg("Installing Caddy reverse proxy"))
@@ -149,7 +151,7 @@ func NewInstallHttpsCmd() *cobra.Command {
 						UFWRules:         []string{"allow ssh", "allow 22", fmt.Sprintf("deny %d", gns3Port)},
 					}
 
-					if err := stateManager.SaveState(hostname, state); err != nil {
+					if err := stateManager.SaveState(hostname, &state); err != nil {
 						fmt.Printf("%s failed to save state: %v\n", messageUtils.WarningMsg("failed to save state"), err)
 					} else {
 						fmt.Printf("%s State saved for server %s\n", messageUtils.SuccessMsg("State saved for server"), hostname)

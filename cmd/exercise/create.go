@@ -96,20 +96,21 @@ func selectAndReplicateTemplateAcrossCluster(cfg config.GlobalOptions, clusterID
 		cfgServer := cfg
 		cfgServer.Server = nodeURL
 
-		body, status, err := utils.CallClient(cfgServer, "getProjects", []string{}, nil)
-		if err != nil {
-			return nil, fmt.Errorf("[%s] getProjects: %w", nodeURL, err)
+		body, status, apiErr := utils.CallClient(cfgServer, "getProjects", []string{}, nil)
+		if apiErr != nil {
+			return nil, fmt.Errorf("[%s] getProjects: %w", nodeURL, apiErr)
 		}
 		if status != 200 {
 			return nil, fmt.Errorf("[%s] getProjects status: %d", nodeURL, status)
 		}
 		var projects []schemas.ProjectResponse
-		if err := json.Unmarshal(body, &projects); err != nil {
-			return nil, fmt.Errorf("[%s] parse projects: %w", nodeURL, err)
+		if unmarshalErr := json.Unmarshal(body, &projects); unmarshalErr != nil {
+			return nil, fmt.Errorf("[%s] parse projects: %w", nodeURL, unmarshalErr)
 		}
 
 		nodeProjects := make(map[string]string)
-		for _, p := range projects {
+		for i := range projects {
+			p := &projects[i]
 			nodeProjects[p.Name] = p.ProjectID
 			nameSet[p.Name] = struct{}{}
 		}
@@ -132,7 +133,7 @@ func selectAndReplicateTemplateAcrossCluster(cfg config.GlobalOptions, clusterID
 
 	selected := fuzzy.NewFuzzyFinder(names, false)
 	if len(selected) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("no items selected")
 	}
 	selName := selected[0]
 
@@ -204,7 +205,7 @@ func importProjectArchive(cfg config.GlobalOptions, archive []byte, projectName 
 	if err != nil {
 		return "", err
 	}
-	if _, err := fw.Write(archive); err != nil {
+	if _, err = fw.Write(archive); err != nil {
 		return "", err
 	}
 	_ = w.Close()
@@ -295,19 +296,19 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 		groupMap := make(map[string]*db.GroupData)
 
 		for _, dat := range data {
-			url := fmt.Sprintf("%v", dat.NodeUrl)
+			nodeURL := fmt.Sprintf("%v", dat.NodeUrl)
 
-			node, ok := nodeMap[url]
+			node, ok := nodeMap[nodeURL]
 			if !ok {
 				plans = append(plans, db.NodeGroupsForClass{
-					NodeURL: url,
+					NodeURL: nodeURL,
 					Groups:  []db.GroupData{},
 				})
 				node = &plans[len(plans)-1]
-				nodeMap[url] = node
+				nodeMap[nodeURL] = node
 			}
 
-			groupKey := url + dat.GroupName
+			groupKey := nodeURL + dat.GroupName
 			group, ok := groupMap[groupKey]
 			if !ok {
 				node.Groups = append(node.Groups, db.GroupData{
@@ -355,8 +356,8 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("[%s] getGroups status: %d", plan.NodeURL, status)
 			}
 			var groups []schemas.UserGroupResponse
-			if err := json.Unmarshal(groupsBody, &groups); err != nil {
-				return fmt.Errorf("[%s] parse groups: %w", plan.NodeURL, err)
+			if unmarshalErr := json.Unmarshal(groupsBody, &groups); unmarshalErr != nil {
+				return fmt.Errorf("[%s] parse groups: %w", plan.NodeURL, unmarshalErr)
 			}
 			want := make(map[string]bool)
 			for _, g := range plan.Groups {
@@ -410,7 +411,7 @@ func runCreateExercise(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, format, templatePath string, selectTemplate, deleteTemplate bool, classGroups []schemas.UserGroupResponse, preselectedTemplateID string) (string, int, error) {
+func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, format, templatePath string, selectTemplate, deleteTemplate bool, classGroups []schemas.UserGroupResponse, preselectedTemplateID string) (templateID string, createdCount int, err error) {
 	fmt.Printf("%v Found %d groups for class %v on %s\n",
 		messageUtils.InfoMsg("Found groups for class"),
 		len(classGroups),
@@ -427,9 +428,10 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 	}
 
 	var templateProjectID string
-	if preselectedTemplateID != "" {
+	switch {
+	case preselectedTemplateID != "":
 		templateProjectID = preselectedTemplateID
-	} else if selectTemplate {
+	case selectTemplate:
 		templateProjectID, err = selectTemplateWithFuzzy(cfg)
 		if err != nil {
 			return "", 0, fmt.Errorf("failed to select template project: %w", err)
@@ -437,8 +439,8 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 		fmt.Printf("%v Selected template project: %v\n",
 			messageUtils.SuccessMsg("Selected template project"),
 			messageUtils.Bold(templateProjectID))
-	} else if templatePath != "" {
-		if _, err := os.Stat(templatePath); err == nil {
+	case templatePath != "":
+		if _, statErr := os.Stat(templatePath); statErr == nil {
 			templateProjectID, err = importTemplateProject(cfg, templatePath, className, exerciseName)
 			if err != nil {
 				return "", 0, fmt.Errorf("failed to import template project: %w", err)
@@ -559,9 +561,9 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 			continue
 		}
 		var poolResp schemas.ResourcePoolResponse
-		if err := json.Unmarshal(poolBody, &poolResp); err != nil {
+		if unmarshalErr := json.Unmarshal(poolBody, &poolResp); unmarshalErr != nil {
 			fmt.Printf("%v Failed to parse pool response for %s: %v\n",
-				messageUtils.ErrorMsg("Failed to parse pool response"), messageUtils.Bold(projectName), err)
+				messageUtils.ErrorMsg("Failed to parse pool response"), messageUtils.Bold(projectName), unmarshalErr)
 			continue
 		}
 		poolID := poolResp.ResourcePoolID
@@ -600,8 +602,8 @@ func createForGroupsOnServer(cfg config.GlobalOptions, className, exerciseName, 
 			if nodes, nerr := qtx.GetNodes(ctx); nerr == nil {
 				var clusterID int
 				for _, n := range nodes {
-					url := fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
-					if url == cfg.Server {
+					nodeURL := fmt.Sprintf("%s://%s:%d", n.Protocol, n.Host, n.Port)
+					if nodeURL == cfg.Server {
 						clusterID = int(n.ClusterID)
 						break
 					}
@@ -714,7 +716,8 @@ func checkExistingExercises(cfg config.GlobalOptions, className string, classGro
 	}
 
 	var existingExercises []string
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		parts := strings.Split(project.Name, "-")
 		if len(parts) >= 4 && parts[0] == className {
 			groupName := strings.Join(parts[:3], "-")
@@ -738,13 +741,14 @@ func selectTemplateWithFuzzy(cfg config.GlobalOptions) (string, error) {
 	}
 
 	var projects []schemas.ProjectResponse
-	if err := json.Unmarshal(projectsBody, &projects); err != nil {
-		return "", fmt.Errorf("failed to parse projects: %w", err)
+	if unmarshalErr := json.Unmarshal(projectsBody, &projects); unmarshalErr != nil {
+		return "", fmt.Errorf("failed to parse projects: %w", unmarshalErr)
 	}
 
 	var projectNames []string
 	projectMap := make(map[string]string)
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		projectNames = append(projectNames, project.Name)
 		projectMap[project.Name] = project.ProjectID
 	}
@@ -775,7 +779,7 @@ func selectTemplateWithFuzzy(cfg config.GlobalOptions) (string, error) {
 }
 
 func importTemplateProject(cfg config.GlobalOptions, filePath, className, exerciseName string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304
 	if err != nil {
 		return "", fmt.Errorf("failed to open template file: %w", err)
 	}
@@ -790,14 +794,14 @@ func importTemplateProject(cfg config.GlobalOptions, filePath, className, exerci
 		return "", fmt.Errorf("failed to create form file: %w", err)
 	}
 
-	if _, err := io.Copy(part, file); err != nil {
+	if _, err = io.Copy(part, file); err != nil {
 		return "", fmt.Errorf("failed to copy file content: %w", err)
 	}
 
 	projectName := fmt.Sprintf("%s-%s-template", className, exerciseName)
 	_ = writer.WriteField("name", projectName)
 
-	if err := writer.Close(); err != nil {
+	if err = writer.Close(); err != nil {
 		return "", fmt.Errorf("failed to close writer: %w", err)
 	}
 
@@ -836,11 +840,12 @@ func resolveTemplateProject(cfg config.GlobalOptions, projectRef string) (string
 	}
 
 	var projects []schemas.ProjectResponse
-	if err := json.Unmarshal(projectsBody, &projects); err != nil {
-		return "", fmt.Errorf("failed to parse projects: %w", err)
+	if unmarshalErr := json.Unmarshal(projectsBody, &projects); unmarshalErr != nil {
+		return "", fmt.Errorf("failed to parse projects: %w", unmarshalErr)
 	}
 
-	for _, project := range projects {
+	for i := range projects {
+		project := &projects[i]
 		if project.Name == projectRef {
 			return project.ProjectID, nil
 		}

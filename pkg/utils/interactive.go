@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,8 +25,7 @@ func (m LoginModel) Init() tea.Cmd {
 }
 
 func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
@@ -51,12 +51,12 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "backspace":
 			if m.step == 0 {
-				if len(m.username) > 0 {
+				if m.username != "" {
 					m.username = m.username[:len(m.username)-1]
 				}
 				m.err = nil
 			} else {
-				if len(m.password) > 0 {
+				if m.password != "" {
 					m.password = m.password[:len(m.password)-1]
 				}
 				m.err = nil
@@ -144,8 +144,7 @@ func (m PasswordModel) Init() tea.Cmd {
 }
 
 func (m PasswordModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
@@ -161,7 +160,7 @@ func (m PasswordModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.done = true
 			return m, tea.Quit
 		case "backspace":
-			if len(m.password) > 0 {
+			if m.password != "" {
 				m.password = m.password[:len(m.password)-1]
 			}
 			m.err = nil
@@ -225,13 +224,13 @@ func ValidatePassword(password string) bool {
 		return false
 	}
 
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasNumber := regexp.MustCompile(`\d`).MatchString(password)
 	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
 
 	return hasNumber && hasLower
 }
 
-func GetLoginCredentials() (string, string, error) {
+func GetLoginCredentials() (username, password string, err error) {
 	p := tea.NewProgram(LoginModel{})
 
 	m, err := p.Run()
@@ -239,7 +238,10 @@ func GetLoginCredentials() (string, string, error) {
 		return "", "", fmt.Errorf("login cancelled")
 	}
 
-	model := m.(LoginModel)
+	model, ok := m.(LoginModel)
+	if !ok {
+		return "", "", fmt.Errorf("failed to get login model")
+	}
 
 	if model.err != nil {
 		return "", "", model.err
@@ -260,7 +262,10 @@ func GetPasswordFromInput() (string, error) {
 		return "", fmt.Errorf("password input cancelled")
 	}
 
-	model := m.(PasswordModel)
+	model, ok := m.(PasswordModel)
+	if !ok {
+		return "", fmt.Errorf("failed to get password model")
+	}
 
 	if model.err != nil {
 		return "", model.err
@@ -273,7 +278,7 @@ func GetPasswordFromInput() (string, error) {
 	return model.password, nil
 }
 
-func EditTextWithEditor(text string, ext string) (string, error) {
+func EditTextWithEditor(text, ext string) (string, error) {
 	tmpFile, err := os.CreateTemp("", "gns3util-edit-*."+ext)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
@@ -325,7 +330,7 @@ func EditTextWithEditor(text string, ext string) (string, error) {
 	}
 
 	if needsStdinInput {
-		cmd := exec.Command(editor, args...)
+		cmd := exec.CommandContext(context.Background(), editor, args...) // #nosec G204
 		cmd.Stdin = strings.NewReader(text)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -341,7 +346,7 @@ func EditTextWithEditor(text string, ext string) (string, error) {
 
 		return string(editedContent), nil
 	} else {
-		cmd := exec.Command(editor, tmpFile.Name())
+		cmd := exec.CommandContext(context.Background(), editor, tmpFile.Name()) // #nosec G204
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

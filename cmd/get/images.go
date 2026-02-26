@@ -99,11 +99,10 @@ func NewGetImageCmd() *cobra.Command {
 
 				var selected []gjson.Result
 				for _, result := range results {
-				outer:
 					for _, data := range apiData {
 						if filename := data.Get("filename"); filename.Exists() && filename.String() == result {
 							selected = append(selected, data)
-							break outer
+							break
 						}
 					}
 				}

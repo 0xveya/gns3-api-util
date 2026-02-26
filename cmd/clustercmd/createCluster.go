@@ -38,7 +38,7 @@ func NewCreateClusterCmd() *cobra.Command {
 				return fmt.Errorf("a cluster with the name %s already exists", name)
 			}
 			var insertDesc sql.NullString
-			if len(desc) > 0 {
+			if desc != "" {
 				insertDesc = sql.NullString{String: desc, Valid: true}
 			} else {
 				insertDesc = sql.NullString{String: "", Valid: false}

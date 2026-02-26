@@ -42,14 +42,14 @@ func NewGetDrawingsCmd() *cobra.Command {
 			}
 			if useFuzzy {
 				params := fuzzy.NewFuzzyInfoParamsWithContext(cfg, "getProjects", "name", multi, "project", "Project:")
-				ids, err := fuzzy.FuzzyInfoIDs(params)
-				if err != nil {
-					return err
+				ids, fuzzyErr := fuzzy.FuzzyInfoIDs(params)
+				if fuzzyErr != nil {
+					return fuzzyErr
 				}
 
-				projectDrawings, err := utils.GetResourceWithContext(cfg, "getDrawings", ids, "project", "Project:")
-				if err != nil {
-					return fmt.Errorf("error getting drawings: %w", err)
+				projectDrawings, drawingsErr := utils.GetResourceWithContext(cfg, "getDrawings", ids, "project", "Project:")
+				if drawingsErr != nil {
+					return fmt.Errorf("error getting drawings: %w", drawingsErr)
 				}
 
 				utils.PrintResourceWithContext(projectDrawings, "Project:")

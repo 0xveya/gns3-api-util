@@ -223,7 +223,7 @@ func (f *fuzzyFinder) View() string {
 }
 
 func getMatches(matches []fuzzy.Match) []string {
-	results := []string{}
+	results := make([]string, 0, len(matches))
 	for _, match := range matches {
 		results = append(results, match.Str)
 	}
@@ -273,7 +273,11 @@ func NewFuzzyFinderWithTitle(input []string, multiMode bool, title string) []str
 		fmt.Println("Bummer, there's been an error:", err)
 		os.Exit(1)
 	}
-	final := a.(*fuzzyFinder)
+	final, ok := a.(*fuzzyFinder)
+	if !ok {
+		// This should never happen in normal operation, but handle it gracefully
+		return []string{}
+	}
 	lines := countLines(final.View())
 	clearLines(lines)
 

@@ -12,7 +12,7 @@ import (
 )
 
 func ReceiveFiles(ctx context.Context, conn *quic.Conn, dstDir string, expected int) error {
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+	if err := os.MkdirAll(dstDir, 0o750); err != nil {
 		return err
 	}
 	for range make([]struct{}, expected) {
@@ -44,13 +44,17 @@ func recvOne(rs *quic.ReceiveStream, dstDir string) error {
 	if _, err := io.ReadFull(rs, sb[:]); err != nil {
 		return err
 	}
-	size := int64(binary.BigEndian.Uint64(sb[:]))
+	uSize := binary.BigEndian.Uint64(sb[:])
+	if uSize > 1<<63-1 {
+		return fmt.Errorf("file size too large")
+	}
+	size := int64(uSize)
 
 	out := filepath.Join(dstDir, string(name))
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 		return err
 	}
-	f, err := os.Create(out)
+	f, err := os.Create(out) // #nosec G304
 	if err != nil {
 		return err
 	}

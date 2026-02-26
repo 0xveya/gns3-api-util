@@ -67,7 +67,7 @@ func NewProjectDuplicateCmd() *cobra.Command {
 		Example: "gns3util -s https://controller:3080 project duplicate my-project --name \"duplicated-project\"",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectID := args[0]
+			projectID = args[0]
 			cfg, err := config.GetGlobalOptionsFromContext(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("failed to get global options: %w", err)
@@ -234,9 +234,9 @@ func NewProjectCloseCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -297,11 +297,11 @@ gns3util -s https://controller:3080 post project import --name "my-project" /pat
 				return fmt.Errorf("failed to get global options: %w", err)
 			}
 
-			if _, err := os.Stat(archiveFile); os.IsNotExist(err) {
+			if _, statErr := os.Stat(archiveFile); os.IsNotExist(statErr) {
 				return fmt.Errorf("archive file does not exist: %s", archiveFile)
 			}
 
-			file, err := os.Open(archiveFile)
+			file, err := os.Open(archiveFile) // #nosec G304
 			if err != nil {
 				return fmt.Errorf("failed to open archive file: %w", err)
 			}
@@ -317,8 +317,8 @@ gns3util -s https://controller:3080 post project import --name "my-project" /pat
 				return fmt.Errorf("failed to create form file: %w", err)
 			}
 
-			if _, err := io.Copy(part, file); err != nil {
-				return fmt.Errorf("failed to copy file content: %w", err)
+			if _, copyErr := io.Copy(part, file); copyErr != nil {
+				return fmt.Errorf("failed to copy file content: %w", copyErr)
 			}
 
 			_ = writer.Close()
@@ -385,9 +385,9 @@ func NewProjectLockCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -446,9 +446,9 @@ func NewProjectOpenCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -507,9 +507,9 @@ func NewProjectUnlockCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -569,9 +569,9 @@ func NewProjectWriteFileCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
@@ -631,9 +631,9 @@ func NewProjectStartCaptureCmd() *cobra.Command {
 			}
 
 			if !utils.IsValidUUIDv4(projectID) {
-				id, err := utils.ResolveID(cfg, "project", projectID, nil)
-				if err != nil {
-					return err
+				id, resolveErr := utils.ResolveID(cfg, "project", projectID, nil)
+				if resolveErr != nil {
+					return resolveErr
 				}
 				projectID = id
 			}
