@@ -38,6 +38,7 @@ scripts/test.yml
 *.yaml
 !.goreleaser.yaml
 *.yml
+!.golangci.yml
 docs/
 docs/
 
