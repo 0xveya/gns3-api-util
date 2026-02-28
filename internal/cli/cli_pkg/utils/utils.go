@@ -149,14 +149,19 @@ func ExecuteAndPrint(cfg config.GlobalOptions, cmdName string, args []string) {
 			messageUtils.SuccessMsg("Command executed successfully"), cmdName)
 		return
 	}
-	if cfg.Raw {
-		if cfg.NoColors {
-			PrintJsonUgly(body)
-		} else {
-			PrintJson(body)
-		}
-	} else {
+	if !cfg.Raw {
 		PrintKV(body)
+		return
+	}
+	switch {
+	case cfg.ReallyUgly || cfg.CollapsedJson:
+		PrintJsonReallyUgly(body)
+
+	case cfg.Ugly || cfg.NoColors:
+		PrintJsonUgly(body)
+
+	default:
+		PrintJson(body)
 	}
 }
 
@@ -169,6 +174,10 @@ func PrintJson(body []byte) {
 func PrintJsonUgly(body []byte) {
 	result := pretty.Pretty(body)
 	fmt.Print(string(result))
+}
+
+func PrintJsonReallyUgly(body []byte) {
+	fmt.Println(string(body))
 }
 
 func PrintKV(body []byte) {
@@ -229,7 +238,6 @@ func PrintKVWithContext(body []byte, contextType, contextField, contextLabel str
 				return true
 			})
 
-			// Print grouped results
 			for contextKey, items := range contextGroups {
 				if contextLabel != "" {
 					fmt.Printf("\n%s %s\n", messageUtils.Bold(contextLabel), messageUtils.Highlight(contextKey))

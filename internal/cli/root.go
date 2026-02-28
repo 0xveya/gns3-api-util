@@ -13,12 +13,15 @@ import (
 )
 
 var (
-	server   string
-	keyFile  string
-	insecure bool
-	raw      bool
-	noColor  bool
-	version  bool
+	server        string
+	keyFile       string
+	insecure      bool
+	raw           bool
+	noColor       bool
+	version       bool
+	collapsedJson bool
+	ugly          bool
+	reallyUgly    bool
 )
 
 var Version = "1.3.0"
@@ -62,10 +65,14 @@ var rootCmd = &cobra.Command{
 		}
 
 		opts := config.GlobalOptions{
-			Server:   server,
-			Insecure: insecure,
-			KeyFile:  keyFile,
-			Raw:      raw,
+			Server:        server,
+			Insecure:      insecure,
+			KeyFile:       keyFile,
+			Raw:           raw,
+			NoColors:      noColor,
+			CollapsedJson: collapsedJson,
+			Ugly:          ugly,
+			ReallyUgly:    reallyUgly,
 		}
 		ctx := config.WithGlobalOptions(cmd.Context(), opts)
 		cmd.SetContext(ctx)
@@ -89,6 +96,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&insecure, "insecure", "i", false, "Ignore unsigned SSL-Certificates")
 	rootCmd.PersistentFlags().BoolVarP(&raw, "raw", "", false, "Output all data in raw json")
 	rootCmd.PersistentFlags().BoolVarP(&noColor, "no-color", "", false, "Output all data in raw json and dont use a colored output")
+	rootCmd.PersistentFlags().BoolVarP(&collapsedJson, "collapsed-json", "", false, "Output all data in raw json, dont use a colored output and dont format it")
+	rootCmd.PersistentFlags().BoolVarP(&ugly, "ugly", "", false, "Output all data in raw json and dont use a colored output (useful for scripting)")
+	rootCmd.PersistentFlags().BoolVarP(&reallyUgly, "really-ugly", "", false, "Output all data in raw json, dont use a colored output and dont format it")
 	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version information")
 
 	rootCmd.AddCommand(auth.NewAuthCmdGroup())
@@ -133,9 +143,22 @@ func Execute() {
 }
 
 func validateGlobalFlags() error {
-	if noColor && !raw {
-		return fmt.Errorf("--no-color can only be used when --raw is also used")
+	isUglyMode := ugly || reallyUgly || noColor || collapsedJson
+
+	if isUglyMode {
+		raw = true
 	}
+
+	if reallyUgly {
+		collapsedJson = true
+		ugly = true
+		noColor = true
+	}
+
+	if ugly || collapsedJson {
+		noColor = true
+	}
+
 	return nil
 }
 

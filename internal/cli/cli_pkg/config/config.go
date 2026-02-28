@@ -10,11 +10,14 @@ type globalOptionsKey string
 const optsKey globalOptionsKey = "globalOptions"
 
 type GlobalOptions struct {
-	Server   string
-	Insecure bool
-	Raw      bool
-	NoColors bool
-	KeyFile  string
+	Server        string
+	Insecure      bool
+	Raw           bool
+	NoColors      bool
+	KeyFile       string
+	CollapsedJson bool
+	Ugly          bool
+	ReallyUgly    bool
 }
 
 func GetGlobalOptionsFromContext(ctx context.Context) (GlobalOptions, error) {

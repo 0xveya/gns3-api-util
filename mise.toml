@@ -3,7 +3,7 @@ BUILD_DIR = "dist"
 VERSION = "{{exec(command='git describe --tags --always --dirty')}}"
 
 [tools]
-go = "1.25"
+go = "1.25.7"
 sqlite = "3.51.2"
 golangci-lint = "2.10.1"
 sqlc = "1.30.0"
