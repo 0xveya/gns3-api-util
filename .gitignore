@@ -30,7 +30,7 @@ go.work
 # End of https://www.toptal.com/developers/gitignore/api/go
 
 old_code/
-gns3util
+/gns3util
 
 api.json
 test_class.json

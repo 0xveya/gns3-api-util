@@ -16,6 +16,10 @@ goreleaser = "2.14.1"
 description = "Run tests"
 run = "go test ./..."
 
+[tasks.run-cli]
+description = "run cli"
+run = "go run ./cmd/gns3util/main.go"
+
 [tasks.build-cli]
 description = "Build for current platform"
 run = "go build -v -o $BUILD_DIR/gns3util ./cmd/gns3util"
