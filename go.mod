@@ -1,6 +1,6 @@
-module github.com/stefanistkuhl/gns3util
+module github.com/0xveya/gns3util
 
-go 1.24.5
+go 1.25.7
 
 require (
 	github.com/carapace-sh/carapace v1.10.3

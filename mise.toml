@@ -1,6 +1,5 @@
 [env]
 BUILD_DIR = "dist"
-BINARY_NAME = "gns3util"
 VERSION = "{{exec(command='git describe --tags --always --dirty')}}"
 
 [tools]
@@ -17,9 +16,9 @@ goreleaser = "2.14.1"
 description = "Run tests"
 run = "go test ./..."
 
-[tasks.build]
+[tasks.build-cli]
 description = "Build for current platform"
-run = "go build -v -o $BINARY_NAME ."
+run = "go build -v -o $BUILD_DIR/gns3util ./cmd/gns3util"
 
 [tasks.build-all]
 description = "Build for all platforms using Goreleaser"
@@ -44,8 +43,8 @@ run = ["goimports -w .", "gofumpt -w .", "go mod tidy"]
 [tasks.format-sql]
 description = "Format SQL files"
 run = [
-  "sleek 'pkg/cluster/db/querys/*.sql'",
-  "sleek 'pkg/cluster/db/schema.sql'",
+  "sleek './internal/cli/cli_pkg/cluster/db/querys/*.sql'",
+  "sleek './internal/cli/cli_pkg/cluster/db/schema.sql'",
 ]
 
 [tasks.lint]

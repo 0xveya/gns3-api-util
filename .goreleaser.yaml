@@ -7,63 +7,33 @@ before:
     - go mod tidy
 
 builds:
-  - id: gns3util_nonwin
-    main: .
+  - id: gns3util
     binary: gns3util
+    main: ./cmd/gns3util
     env:
       - CGO_ENABLED=0
-    flags:
-      - -trimpath
-    ldflags:
-      - -s -w
-      - -X github.com/stefanistkuhl/gns3util/cmd.Version={{ .Version }}
     goos:
       - linux
       - darwin
-    goarch:
-      - amd64
-      - arm64
-    goamd64:
-      - v1
-
-  - id: gns3util_win
-    main: .
-    binary: gns3util
-    env:
-      - CGO_ENABLED=0
-    flags:
-      - -trimpath
-    ldflags:
-      - -s -w
-      - -X github.com/stefanistkuhl/gns3util/cmd.Version={{ .Version }}
-    goos:
       - windows
     goarch:
       - amd64
       - arm64
-    goamd64:
-      - v1
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/0xveya/gns3util/internal/cli.Version={{ .Version }}
 
 archives:
-  - id: non_windows
-    ids: [gns3util_nonwin]
+  - id: default
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
-    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
-    wrap_in_directory: false
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     files:
       - README.md
       - LICENSE
-      # - completions/**
-
-  - id: windows
-    ids: [gns3util_win]
-    formats: [zip]
-    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
-    wrap_in_directory: false
-    files:
-      - README.md
-      - LICENSE
-      # - completions/**
 
 checksum:
   name_template: "checksums.txt"
