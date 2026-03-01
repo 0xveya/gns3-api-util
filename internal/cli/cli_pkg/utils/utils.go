@@ -16,15 +16,18 @@ import (
 
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/authentication"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/config"
+	"github.com/0xveya/gns3util/internal/cli/cli_pkg/globals"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/utils/messageUtils"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/utils/pathUtils"
 	"github.com/0xveya/gns3util/pkg/api"
 	"github.com/0xveya/gns3util/pkg/api/endpoints"
 	"github.com/google/uuid"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/pretty"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"gopkg.in/yaml.v3"
 )
 
 var idElementName = map[string][2]string{
@@ -149,20 +152,61 @@ func ExecuteAndPrint(cfg config.GlobalOptions, cmdName string, args []string) {
 			messageUtils.SuccessMsg("Command executed successfully"), cmdName)
 		return
 	}
-	if !cfg.Raw {
+	PrintOutput(body, cfg)
+}
+
+func PrintOutput(body []byte, cfg config.GlobalOptions) {
+	switch cfg.OutputFormat {
+	case globals.OutputJSON:
+		PrintJson(body)
+	case globals.OutputJSONColorless:
+		PrintJsonUgly(body)
+	case globals.OutputCollapsed:
+		PrintJsonReallyUgly(body)
+	case globals.OutputYAML:
+		PrintYaml(body)
+	case globals.OutputTOML:
+		PrintToml(cfg.CommandPath, body)
+	default:
 		PrintKV(body)
+	}
+}
+
+func unmarshalBody(body []byte) any {
+	var data any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return string(body)
+	}
+	return data
+}
+
+func PrintYaml(body []byte) {
+	data := unmarshalBody(body)
+	yamlData, err := yaml.Marshal(data)
+	if err != nil {
+		fmt.Printf("Error encoding YAML: %v\n", err)
 		return
 	}
-	switch {
-	case cfg.ReallyUgly || cfg.CollapsedJson:
-		PrintJsonReallyUgly(body)
+	fmt.Print(string(yamlData))
+}
 
-	case cfg.Ugly || cfg.NoColors:
-		PrintJsonUgly(body)
-
-	default:
-		PrintJson(body)
+func PrintToml(cmdPath string, body []byte) {
+	var data interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
 	}
+
+	wrappedData := map[string]interface{}{
+		cmdPath: data,
+	}
+
+	tomlData, err := toml.Marshal(wrappedData)
+	if err != nil {
+		fmt.Printf("Error encoding TOML: %v\n", err)
+		return
+	}
+	fmt.Print(string(tomlData))
 }
 
 func PrintJson(body []byte) {

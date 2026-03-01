@@ -3,6 +3,8 @@ package config
 import (
 	"context"
 	"fmt"
+
+	"github.com/0xveya/gns3util/internal/cli/cli_pkg/globals"
 )
 
 type globalOptionsKey string
@@ -10,14 +12,11 @@ type globalOptionsKey string
 const optsKey globalOptionsKey = "globalOptions"
 
 type GlobalOptions struct {
-	Server        string
-	Insecure      bool
-	Raw           bool
-	NoColors      bool
-	KeyFile       string
-	CollapsedJson bool
-	Ugly          bool
-	ReallyUgly    bool
+	Server       string
+	Insecure     bool
+	KeyFile      string
+	OutputFormat globals.OutputFormat
+	CommandPath  string
 }
 
 func GetGlobalOptionsFromContext(ctx context.Context) (GlobalOptions, error) {

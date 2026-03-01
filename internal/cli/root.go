@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/config"
+	"github.com/0xveya/gns3util/internal/cli/cli_pkg/globals"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/utils/messageUtils"
 	"github.com/0xveya/gns3util/internal/cli/cmds/auth"
 	"github.com/0xveya/gns3util/internal/cli/cmds/class"
@@ -13,15 +14,11 @@ import (
 )
 
 var (
-	server        string
-	keyFile       string
-	insecure      bool
-	raw           bool
-	noColor       bool
-	version       bool
-	collapsedJson bool
-	ugly          bool
-	reallyUgly    bool
+	server       string
+	keyFile      string
+	insecure     bool
+	version      bool
+	outputFormat string
 )
 
 var Version = "1.3.0"
@@ -33,7 +30,13 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() == "completion" || (cmd.Parent() != nil && cmd.Parent().Name() == "completion") {
+		if cmd.Name() == "completion" ||
+			cmd.Name() == "_carapace" ||
+			cmd.Name() == "help" ||
+			(cmd.Parent() != nil && cmd.Parent().Name() == "completion") {
+			return nil
+		}
+		if len(args) > 0 && args[0] == "_carapace" {
 			return nil
 		}
 
@@ -64,15 +67,15 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		cmdPath := cmd.CommandPath()
+
+		fmtType := globals.ParseOutputFormat(outputFormat)
 		opts := config.GlobalOptions{
-			Server:        server,
-			Insecure:      insecure,
-			KeyFile:       keyFile,
-			Raw:           raw,
-			NoColors:      noColor,
-			CollapsedJson: collapsedJson,
-			Ugly:          ugly,
-			ReallyUgly:    reallyUgly,
+			Server:       server,
+			Insecure:     insecure,
+			KeyFile:      keyFile,
+			OutputFormat: fmtType,
+			CommandPath:  cmdPath,
 		}
 		ctx := config.WithGlobalOptions(cmd.Context(), opts)
 		cmd.SetContext(ctx)
@@ -94,12 +97,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "GNS3v3 Server URL (required for non cluster commands)")
 	rootCmd.PersistentFlags().StringVarP(&keyFile, "key-file", "k", "", "Set a location for a keyfile to use")
 	rootCmd.PersistentFlags().BoolVarP(&insecure, "insecure", "i", false, "Ignore unsigned SSL-Certificates")
-	rootCmd.PersistentFlags().BoolVarP(&raw, "raw", "", false, "Output all data in raw json")
-	rootCmd.PersistentFlags().BoolVarP(&noColor, "no-color", "", false, "Output all data in raw json and dont use a colored output")
-	rootCmd.PersistentFlags().BoolVarP(&collapsedJson, "collapsed-json", "", false, "Output all data in raw json, dont use a colored output and dont format it")
-	rootCmd.PersistentFlags().BoolVarP(&ugly, "ugly", "", false, "Output all data in raw json and dont use a colored output (useful for scripting)")
-	rootCmd.PersistentFlags().BoolVarP(&reallyUgly, "really-ugly", "", false, "Output all data in raw json, dont use a colored output and dont format it")
 	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version information")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "kv", "Output format. Options: [kv, json, json-colorless, collapsed, yaml, toml]")
 
 	rootCmd.AddCommand(auth.NewAuthCmdGroup())
 
@@ -134,6 +133,16 @@ func init() {
 		"key-file": carapace.ActionFiles(),
 		"server":   carapace.ActionValues("http://localhost:3080", "https://gns3.example.com"),
 	})
+	carapace.Gen(rootCmd).FlagCompletion(carapace.ActionMap{
+		"output": carapace.ActionValuesDescribed(
+			"kv", "Classic Key-Value pairs (default)",
+			"json", "Pretty-printed JSON with colors",
+			"json-colorless", "Pretty-printed JSON without colors",
+			"collapsed", "Minified JSON (really ugly)",
+			"yaml", "YAML format",
+			"toml", "TOML format",
+		),
+	})
 }
 
 func Execute() {
@@ -143,22 +152,14 @@ func Execute() {
 }
 
 func validateGlobalFlags() error {
-	isUglyMode := ugly || reallyUgly || noColor || collapsedJson
-
-	if isUglyMode {
-		raw = true
+	validFormats := map[string]bool{
+		"kv": true, "json": true, "json-colorless": true,
+		"collapsed": true, "yaml": true, "toml": true,
 	}
 
-	if reallyUgly {
-		collapsedJson = true
-		ugly = true
-		noColor = true
+	if !validFormats[outputFormat] {
+		return fmt.Errorf("invalid output format %q: choose from kv, json, json-colorless, collapsed, yaml, toml", outputFormat)
 	}
-
-	if ugly || collapsedJson {
-		noColor = true
-	}
-
 	return nil
 }
 
