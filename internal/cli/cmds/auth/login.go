@@ -25,9 +25,6 @@ func NewAuthLoginCmd() *cobra.Command {
 		Short: "Log in as user",
 		Long:  `Log in as a user`,
 		PreRun: func(cmd *cobra.Command, args []string) {
-			viper.SetEnvPrefix("GNS3")
-			viper.AutomaticEnv()
-
 			_ = viper.BindPFlag("user", cmd.Flags().Lookup("user"))
 			_ = viper.BindPFlag("password", cmd.Flags().Lookup("password"))
 

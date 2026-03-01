@@ -40,9 +40,6 @@ gns3util -s https://controller:3080 user change-password my-user -p "newpassword
 			return nil
 		},
 		PreRun: func(cmd *cobra.Command, args []string) {
-			viper.SetEnvPrefix("GNS3")
-			viper.AutomaticEnv()
-
 			_ = viper.BindPFlag("password", cmd.Flags().Lookup("password"))
 
 			if !cmd.Flags().Changed("password") {

@@ -21,7 +21,7 @@ import (
 
 func NewGetNotificationsCmd() *cobra.Command {
 	timeout := 5
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "notifications",
 		Short:   "Stream the notification of the controller",
 		Long:    `Stream the notification of the controller`,
@@ -101,7 +101,7 @@ func NewGetNotificationsCmd() *cobra.Command {
 
 func NewGetProjectNotificationCmd() *cobra.Command {
 	timeout := 5
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "notifications [project-name/id]",
 		Short:   "Stream the notification of a project by id or name",
 		Long:    `Stream the notification of a project by id or name`,

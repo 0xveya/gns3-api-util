@@ -1,4 +1,4 @@
-# GNS3 API Util
+# GNS3UTIL
 
 <p align="center">
   <img width=256 src="https://i.imgur.com/t1PNyl4.gif" alt="surely a temporary logo" />
@@ -65,13 +65,22 @@ Download pre-built binaries from the [Releases page](https://github.com/stefanis
 go build -o gns3util
 ```
 
-### Authentication
-```bash
-# Login to your GNS3 server
-gns3util -s https://your-gns3-server:3080 auth login
+### Quick Start Update
 
-# Or use a keyfile
-gns3util -s https://your-gns3-server:3080 -k ~/.gns3/gns3key
+```md
+## Quick Start
+
+### **Authentication & Sticky Settings**
+```bash
+# 1. Login to your GNS3 server
+gns3util -s https://your-server:3080 auth login
+
+# 2. Enable Auto-Save to remember your server and format
+# Add this to your shell profile (~/.config/fish/config.fish or ~/.bashrc)
+export GNS3_STORE_LAST_SETTINGS=true
+
+# 3. Use a flag once, and it will be remembered for next time
+gns3util user ls -o json
 ```
 
 ### Basic Usage
@@ -193,7 +202,7 @@ gns3util -s https://server:3080 remote install gns3 admin \
   --gns3-port 3080 \
   --home-dir /opt/gns3
 
-# Install with IOU support (requires valid license)
+# Install with IOU support
 gns3util -s https://server:3080 remote install gns3 admin \
   --use-iou \
   --enable-i386 \
@@ -424,11 +433,41 @@ gns3util cluster config sync
 
 ## Configuration
 
-### Global Flags
-- `-s, --server`: GNS3v3 Server URL (required)
-- `-k, --key-file`: Path to authentication keyfile
-- `-i, --insecure`: Ignore SSL certificate errors
-- `--raw`: Output raw JSON instead of formatted text
+### **Global Flags**
+The utility supports several global flags to control behavior across all subcommands:
+
+- `-s, --server`: GNS3v3 Server URL (e.g., `http://10.0.0.12:3080`).
+- `-k, --key-file`: Path to authentication keyfile. Defaults to `~/.gns3/keys.json`.
+- `-i, --insecure`: Ignore unsigned SSL certificates.
+- `-o, --output`: Set the preferred output format.
+    - `kv`: Classic Key-Value pairs (Default).
+    - `json`: Pretty-printed JSON with colors.
+    - `json-colorless`: Pretty-printed JSON without colors.
+    - `collapsed`: Minified JSON.
+    - `yaml`: YAML format.
+    - `toml`: TOML format.
+
+### **Persistent Settings (TOML)**
+The tool automatically manages its state in `~/.gns3/config.toml`. It follows a specific priority logic:
+1. **Explicit Flags**: Command-line flags (e.g., `-s` or `-o`) always take highest priority.
+2. **Environment Variables**: Overrides file settings. Supported variables include:
+    - `GNS3_SERVER`: Maps to `--server`
+    - `GNS3_OUTPUT`: Maps to `--output`
+    - `GNS3_KEY_FILE`: Maps to `--key-file`
+    - `GNS3_INSECURE`: Maps to `--insecure`
+    - `GNS3_STORE_LAST_SETTINGS`: Enables the "sticky" auto-save feature.
+3. **Config File**: Settings loaded from `~/.gns3/config.toml`.
+4. **Defaults**: Hardcoded fallbacks (e.g., `kv` format).
+**Auto-Save Feature**:
+If the environment variable `GNS3_STORE_LAST_SETTINGS=true` is set, the tool will automatically update your `config.toml` with the flags used in your last successful command, making your preferred server and format "sticky."
+
+**Example `~/.gns3/config.toml`**:
+```toml
+server = "http://10.0.0.12:3080"
+output = "toml"
+key-file = "/home/user/.gns3/keys.json"
+insecure = false
+```
 
 ### Authentication
 The tool supports multiple authentication methods:

@@ -157,9 +157,6 @@ func RunAddNodes(opts *AddNodeOptions, cmd *cobra.Command) ([]db.NodeData, error
 }
 
 func ValidateClusterAndCreds(clusterName string, opts *AddNodeOptions, cmd *cobra.Command) error {
-	viper.SetEnvPrefix("GNS3")
-	viper.AutomaticEnv()
-
 	_ = viper.BindPFlag("user", cmd.Flags().Lookup("user"))
 	_ = viper.BindPFlag("password", cmd.Flags().Lookup("password"))
 

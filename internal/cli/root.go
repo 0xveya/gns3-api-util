@@ -2,15 +2,19 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/config"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/globals"
+	"github.com/0xveya/gns3util/internal/cli/cli_pkg/utils"
 	"github.com/0xveya/gns3util/internal/cli/cli_pkg/utils/messageUtils"
 	"github.com/0xveya/gns3util/internal/cli/cmds/auth"
 	"github.com/0xveya/gns3util/internal/cli/cmds/class"
 	"github.com/0xveya/gns3util/internal/cli/cmds/exercise"
 	"github.com/carapace-sh/carapace"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -21,12 +25,12 @@ var (
 	outputFormat string
 )
 
-var Version = "1.3.0"
+var Version = "1.3.1"
 
 var rootCmd = &cobra.Command{
 	Use:           "gns3util",
-	Short:         "A utility for GNS3v3",
-	Long:          `A utility for GNS3v3 for managing GNS3v3 projects and devices.`,
+	Short:         "A cute little utility for GNS3v3",
+	Long:          `A cute little utility for GNS3v3 for managing GNS3v3 projects and devices.`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -43,6 +47,19 @@ var rootCmd = &cobra.Command{
 		if version {
 			return nil
 		}
+
+		if server == "" {
+			server = viper.GetString("server")
+		}
+		if outputFormat == "" || outputFormat == "kv" {
+			if v := viper.GetString("output"); v != "" {
+				outputFormat = v
+			}
+		}
+		if keyFile == "" {
+			keyFile = viper.GetString("key-file")
+		}
+		keyFile, _ = utils.ExpandPath(keyFile)
 
 		if err := validateGlobalFlags(); err != nil {
 			return err
@@ -89,16 +106,39 @@ var rootCmd = &cobra.Command{
 		}
 		return cmd.Help()
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		if os.Getenv("GNS3_STORE_LAST_SETTINGS") == "true" {
+			gns3Dir, err := utils.GetGNS3Dir()
+			if err != nil {
+				return nil
+			}
+
+			viper.Set("server", server)
+			viper.Set("output", outputFormat)
+			viper.Set("key-file", keyFile)
+			viper.Set("insecure", insecure)
+
+			configPath := filepath.Join(gns3Dir, "config.toml")
+			_ = viper.WriteConfigAs(configPath)
+		}
+		return nil
+	},
 }
 
 func init() {
 	carapace.Gen(rootCmd)
 	cobra.OnFinalize()
-	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "GNS3v3 Server URL (required for non cluster commands)")
-	rootCmd.PersistentFlags().StringVarP(&keyFile, "key-file", "k", "", "Set a location for a keyfile to use")
-	rootCmd.PersistentFlags().BoolVarP(&insecure, "insecure", "i", false, "Ignore unsigned SSL-Certificates")
-	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version information")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "kv", "Output format. Options: [kv, json, json-colorless, collapsed, yaml, toml]")
+	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "",
+		"GNS3v3 Server URL. Can be set via GNS3_SERVER or config.toml")
+
+	rootCmd.PersistentFlags().StringVarP(&keyFile, "key-file", "k", "",
+		"Path to authentication keyfile. Can be set via GNS3_KEY_FILE or config.toml")
+
+	rootCmd.PersistentFlags().BoolVarP(&insecure, "insecure", "i", false,
+		"Ignore unsigned SSL-Certificates. Can be set via GNS3_INSECURE")
+
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "kv",
+		"Output format: [kv, json, json-colorless, collapsed, yaml, toml]. Can be set via GNS3_OUTPUT")
 
 	rootCmd.AddCommand(auth.NewAuthCmdGroup())
 
@@ -143,6 +183,22 @@ func init() {
 			"toml", "TOML format",
 		),
 	})
+	gns3Dir, err := utils.GetGNS3Dir()
+	if err == nil {
+		viper.AddConfigPath(gns3Dir)
+		viper.SetConfigName("config")
+		viper.SetConfigType("toml")
+	}
+
+	viper.SetEnvPrefix("GNS3")
+	viper.AutomaticEnv()
+
+	_ = viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
+	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
+	_ = viper.BindPFlag("key-file", rootCmd.PersistentFlags().Lookup("key-file"))
+	_ = viper.BindPFlag("insecure", rootCmd.PersistentFlags().Lookup("insecure"))
+
+	_ = viper.ReadInConfig()
 }
 
 func Execute() {
